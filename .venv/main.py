@@ -242,7 +242,6 @@ class Game:
                 if "Official" in adjacent_pieces:
                     promoting_piece.promoted = True
 
-
     def move_piece(self, from_pos, to_pos):
         """Handle piece movement and capture logic"""
         from_row, from_col = from_pos
