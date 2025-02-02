@@ -6,19 +6,20 @@ from typing import List
 pygame.init()
 
 # Constants
-BOARD_SIZE = 13
+BOARD_SIZE = 17
 NUMBER_OF_PIECES = 9
 CELL_SIZE = 60  # Made this explicit for clarity
 GRID_OFFSET = CELL_SIZE
 BOARD_PIXELS = BOARD_SIZE * CELL_SIZE
 RESERVE_WIDTH = CELL_SIZE * 4  # Width for the piece reserve area
 WINDOW_SIZE = BOARD_PIXELS + (GRID_OFFSET * 2) + RESERVE_WIDTH  # Total window width
+PALACE_AREA = 7
 
 # Colors
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 BROWN = (139, 69, 19)
-GRID_COLOR = (50, 50, 50)
+GRID_COLOR = (20, 20,20)
 NEW = (50, 50, 50)
 
 PLACE_HIGHLIGHT_PLAYER1 = (0, 255, 0, 128)
@@ -29,6 +30,8 @@ MOVE_HIGHLIGHT_PLAYER2 = (127, 90, 127, 128)
 RED = (255, 50, 50)
 GOLD = (50, 150, 10)
 PURPLE = (255,0,255)
+PLAYER_1_COLOR = (255,255,255)
+PLAYER_2_COLOR = (0,0,0)
 
 # Game constants
 EMPTY = 0
@@ -208,7 +211,6 @@ class Game:
                 promote(promoting_piece, move_distance_increase=1)
 
         elif name == "Official":
-            promote(promoting_piece)  # Always promote if adjacent_pieces exist
             if "Monarch" in adjacent_pieces:
                 promote(promoting_piece, new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1)])
             elif "Advisor" in adjacent_pieces:
@@ -220,9 +222,7 @@ class Game:
             if "Monarch" in adjacent_pieces or "Official" in adjacent_pieces:
                 promote(promoting_piece)
             elif "Advisor" in adjacent_pieces:
-                promote(promoting_piece, new_directions=[(1, 0), (-1, 0), (0, 1), (0, -1)])
-            elif "Official" in adjacent_pieces:
-                promote(promoting_piece)
+                promoting_piece.directions += [(1, 0), (-1, 0), (0, 1), (0, -1)]
 
     def move_piece(self, from_pos, to_pos):
         """Handle piece movement and capture logic"""
@@ -270,10 +270,12 @@ class Game:
                 if piece == EMPTY or piece.owner != self.current_player:
                     continue
 
+                area_size = PALACE_AREA  # You can change this value to any other number
+
                 if piece.name == "Palace":
-                    # Mark the 5x5 area around the Palace (from row-2 to row+2, col-2 to col+2)
-                    for i in range(row - 2, row + 3):  # 5x5 area
-                        for j in range(col - 2, col + 3):  # 5x5 area
+                    # Mark the area around the Palace (from row - (area_size // 2) to row + (area_size // 2), col - (area_size // 2) to col + (area_size // 2))
+                    for i in range(row - (area_size // 2), row + (area_size // 2) + 1):
+                        for j in range(col - (area_size // 2), col + (area_size // 2) + 1):
                             # Make sure the indices are within board bounds
                             if 0 <= i < BOARD_SIZE and 0 <= j < BOARD_SIZE:
                                 valid_squares.add((i, j))
@@ -285,8 +287,7 @@ class Game:
         return valid_squares
 
     def handle_click(self, row, col):
-        """Handle both piece placement and movement"""
-        if self.game_over:  # Don't process clicks if game is over
+        if self.game_over:
             return
 
         # King placement phase
@@ -456,8 +457,22 @@ class Game:
         elif piece.name == "Advisor":
             pygame.draw.circle(screen, contrast_color, center, CELL_SIZE // 4)
         elif piece.name == "Palace":
-            top_left = (center[0] - CELL_SIZE // 4, center[1] - CELL_SIZE // 4)
-            pygame.draw.rect(screen, PURPLE, (top_left[0], top_left[1], CELL_SIZE // 2, CELL_SIZE // 2))
+            # 5x5 area alignment around the Palace
+            area_size = PALACE_AREA  # 5x5 area around the Palace
+            # Calculate the top-left corner of the 5x5 area
+            top_left_x = (center[0] // CELL_SIZE) * CELL_SIZE - (area_size // 2) * CELL_SIZE
+            top_left_y = (center[1] // CELL_SIZE) * CELL_SIZE - (area_size // 2) * CELL_SIZE
+
+            # Set the outline color based on the player's color
+            outline_color = PLAYER_1_COLOR if piece.owner == PLAYER_1 else PLAYER_2_COLOR
+
+            # Draw the outline of the 5x5 area
+            outline_rect = pygame.Rect(top_left_x, top_left_y, area_size * CELL_SIZE, area_size * CELL_SIZE)
+            pygame.draw.rect(screen, outline_color, outline_rect, 4)  # Draw just the outline (border)
+
+            # Draw the actual Palace piece in the center of the grid cell
+            palace_top_left = (center[0] - CELL_SIZE // 4, center[1] - CELL_SIZE // 4)
+            pygame.draw.rect(screen, PURPLE, (palace_top_left[0], palace_top_left[1], CELL_SIZE // 2, CELL_SIZE // 2))
 
     def draw_piece_reserve(self, screen):
         """Draw the piece reserve area on the right side."""
@@ -482,11 +497,22 @@ class Game:
         piece_spacing = CELL_SIZE * 0.8
         for row_idx, row in enumerate(reserve):
             for col_idx, piece_type in enumerate(row):
+                # Calculate x and y positions for each piece
                 x = reserve_start_x + (col_idx * piece_spacing)
                 y = y_offset + (row_idx * piece_spacing)
+
+                # Check if the piece is within the screen width and height
+                if x + piece_spacing > WINDOW_SIZE:  # If the piece goes off the screen to the right
+                    continue  # Skip drawing this piece
+                if y + piece_spacing > WINDOW_SIZE:  # If the piece goes off the screen downward
+                    continue  # Skip drawing this piece
+
+                # Draw the piece
                 pygame.draw.circle(screen, piece_color,
                                    (int(x + piece_spacing / 2), int(y + piece_spacing / 2)),
                                    int(piece_spacing / 2 - 5))
+
+                # Draw specific piece type (Advisor or Palace)
                 if piece_type == "Advisor":
                     pygame.draw.circle(screen, contrast_color,
                                        (int(x + piece_spacing / 2), int(y + piece_spacing / 2)),
