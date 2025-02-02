@@ -216,7 +216,7 @@ class Game:
         promoting_piece = self.board[row][col]
         adjacent_pieces = self.has_friendly_adjacent_pieces(row, col)
 
-        if not adjacent_pieces:
+        if not adjacent_pieces or adjacent_pieces == {"Palace"}:
             self.demote(row, col)
             return
 
