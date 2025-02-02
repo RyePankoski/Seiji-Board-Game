@@ -6,7 +6,7 @@ from typing import List
 pygame.init()
 
 # Constants
-BOARD_SIZE = 17
+BOARD_SIZE = 15
 NUMBER_OF_PIECES = 9
 CELL_SIZE = 60  # Made this explicit for clarity
 GRID_OFFSET = CELL_SIZE
@@ -19,7 +19,7 @@ PALACE_AREA = 5
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 BROWN = (139, 69, 19)
-GRID_COLOR = (20, 20,20)
+GRID_COLOR = (20, 20, 20)
 NEW = (50, 50, 50)
 
 PLACE_HIGHLIGHT_PLAYER1 = (0, 255, 0, 128)
@@ -29,9 +29,10 @@ MOVE_HIGHLIGHT_PLAYER2 = (127, 90, 127, 128)
 
 RED = (255, 50, 50)
 GOLD = (50, 150, 10)
-PURPLE = (255,0,255)
-PLAYER_1_COLOR = (255,255,255)
-PLAYER_2_COLOR = (0,0,0)
+PURPLE = (255, 0, 255)
+PLAYER_1_COLOR = (255, 255, 255)
+PLAYER_2_COLOR = (0, 0, 0)
+YELLOW = (255, 200, 50)
 
 # Game constants
 EMPTY = 0
@@ -42,17 +43,19 @@ PLAYER_2_KING = 4
 SCOUT_1 = 5
 SCOUT_2 = 6
 
-#images
 
+# images
 
 
 class Piece:
-    def __init__(self, name: str, directions: List[str], move_distance: int, owner: int, promoted: False):
+    def __init__(self, name, directions, move_distance, owner, promoted=False):
         self.name = name
         self.directions = directions
         self.move_distance = move_distance
         self.owner = owner
-        self.promoted = False
+        self.promoted = promoted
+        self.promote_sound_played = False
+
 
 class Game:
     def __init__(self):
@@ -72,6 +75,9 @@ class Game:
         self.place_sound = pygame.mixer.Sound("place_sound.mp3")  # Replace with actual file path
         self.slide_sound = pygame.mixer.Sound("slide_sound.mp3")
         self.pick_up = pygame.mixer.Sound("pick_up.mp3")
+        self.capture = pygame.mixer.Sound("capture.mp3")
+        self.promote = pygame.mixer.Sound("promote.mp3")
+        self.endgame = pygame.mixer.Sound("endgame.mp3")
 
         self.background = pygame.image.load("background.png")
         self.background = pygame.transform.scale(self.background, (BOARD_SIZE * CELL_SIZE, BOARD_SIZE * CELL_SIZE))
@@ -96,20 +102,6 @@ class Game:
             return True
         else:
             return False
-
-    def demote(self, row, col):
-        piece_to_demote = self.board[row][col]
-        piece_to_demote.promoted = False
-
-        demotion_settings = {
-            "Official": ([(1, 0), (0, 1), (-1, 0), (0, -1)], 1),
-            "Advisor": ([(1, 1), (1, -1), (-1, -1), (-1, 1)], 3),
-            "Monarch": ([(-1, 0), (1, 0), (0, -1), (0, 1),
-                         (-1, -1), (1, 1), (-1, 1), (1, -1)], 2)
-        }
-
-        if piece_to_demote.name in demotion_settings:
-            piece_to_demote.directions, piece_to_demote.move_distance = demotion_settings[piece_to_demote.name]
 
     def check_board_promotions(self):
         for row in range(BOARD_SIZE):
@@ -203,39 +195,57 @@ class Game:
 
         return moves
 
+    def demote(self, row, col):
+        piece_to_demote = self.board[row][col]
+        piece_to_demote.promoted = False
+
+        demotion_settings = {
+            "Official": ([(1, 0), (0, 1), (-1, 0), (0, -1)], 1),
+            "Advisor": ([(1, 1), (1, -1), (-1, -1), (-1, 1)], 3),
+            "Monarch": ([(-1, 0), (1, 0), (0, -1), (0, 1),
+                         (-1, -1), (1, 1), (-1, 1), (1, -1)], 2)
+        }
+
+        if piece_to_demote.name in demotion_settings:
+            piece_to_demote.directions, piece_to_demote.move_distance = demotion_settings[piece_to_demote.name]
+
     def should_I_promote_piece(self, row, col):
-        self.demote(row, col)
         promoting_piece = self.board[row][col]
         adjacent_pieces = self.has_friendly_adjacent_pieces(row, col)
 
         if not adjacent_pieces:
+            self.demote(row, col)
             return
 
-        def promote(piece, move_distance_increase=0, new_directions=None):
-            piece.promoted = True
-            piece.move_distance += move_distance_increase
-            if new_directions:
-                piece.directions += new_directions
+        def promote(piece, move_distance=0, new_directions=None):
+            if piece.promoted == False:
+                self.promote.play()
+                piece.promoted = True
+                piece.move_distance = move_distance  # Set move_distance directly
+                if new_directions:
+                    piece.directions = new_directions  # Set directions directly
 
         name = promoting_piece.name
 
         if name == "Monarch":
             if {"Official", "Advisor"}.issubset(adjacent_pieces):
-                promote(promoting_piece, move_distance_increase=1)
+                promote(promoting_piece, move_distance=3)
 
         elif name == "Official":
             if "Monarch" in adjacent_pieces:
-                promote(promoting_piece, new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1)])
+                promote(promoting_piece, 1,
+                        new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0), (0, -1)])
             elif "Advisor" in adjacent_pieces:
-                promote(promoting_piece, move_distance_increase=2)
+                promote(promoting_piece, move_distance=3)
             elif "Official" in adjacent_pieces:
-                promote(promoting_piece, move_distance_increase=1)
+                promote(promoting_piece, move_distance=2)
 
         elif name == "Advisor":
             if "Monarch" in adjacent_pieces or "Official" in adjacent_pieces:
-                promote(promoting_piece)
+                promote(promoting_piece, 3, new_directions=[(1, 1), (-1, -1), (-1, 1), (1, -1)])
             elif "Advisor" in adjacent_pieces:
-                promoting_piece.directions += [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                promoting_piece.directions = [(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0),
+                                              (0, -1)]  # Set directions directly
 
     def move_piece(self, from_pos, to_pos):
         """Handle piece movement and capture logic"""
@@ -256,10 +266,12 @@ class Game:
             captured_piece_name = target_square.name
             # Handle special cases for capturing important pieces
             if captured_piece_name == "Monarch":
+                self.endgame.play()
                 print(f"{'Black' if current_player == PLAYER_2 else 'White'} wins by capturing the opponent's Monarch!")
                 self.game_over = True
                 self.winner = current_player
             else:
+                self.capture.play()
                 # Add captured piece to the current player's reserve
                 piece_reserve = reserve_to_edit[0] if captured_piece_name == "Advisor" else reserve_to_edit[1]
                 piece_reserve.append(captured_piece_name)
@@ -386,10 +398,7 @@ class Game:
 
     def draw(self, screen):
 
-
         screen.blit(self.background_2, (0, 0))  # This covers the whole screen
-
-
 
         # Draw the background (wood pattern) behind the grid (just the board area)
         screen.blit(self.background, (GRID_OFFSET, GRID_OFFSET))
@@ -562,9 +571,38 @@ class Game:
 
         # Draw game over message if applicable
         if self.game_over:
-            winner_text = "White Wins!" if self.winner == PLAYER_1 else "Black Wins!"
-            text5 = font.render(winner_text, True, GOLD)
-            screen.blit(text5, (WINDOW_SIZE // 2 - 100, 10))
+            winner_text = "WHITE WINS" if self.winner == PLAYER_1 else "BLACK WINS"
+
+            # Use a much larger font for the end game message
+            end_game_font = pygame.font.Font(None, 250)
+            text5 = end_game_font.render(winner_text, True, YELLOW)
+
+            # Get the width and height of the text to center it
+            text_rect = text5.get_rect(center=(WINDOW_SIZE // 2, WINDOW_SIZE // 2))
+
+            # Create a black outline effect by drawing the text in all 8 directions
+            outline_offset = 5
+            # List of all 8 directions for the outline
+            outline_positions = [
+                (-outline_offset, -outline_offset),  # Top-left
+                (0, -outline_offset),  # Top
+                (outline_offset, -outline_offset),  # Top-right
+                (-outline_offset, 0),  # Left
+                (outline_offset, 0),  # Right
+                (-outline_offset, outline_offset),  # Bottom-left
+                (0, outline_offset),  # Bottom
+                (outline_offset, outline_offset)  # Bottom-right
+            ]
+
+            # Draw the outline
+            for x_offset, y_offset in outline_positions:
+                outline_rect = text_rect.copy()
+                outline_rect.x += x_offset
+                outline_rect.y += y_offset
+                screen.blit(end_game_font.render(winner_text, True, BLACK), outline_rect)
+
+            # Draw the main text in the center of the screen
+            screen.blit(text5, text_rect)
 
     def draw_selected_reserve_piece(self, screen):
         """Draw selected reserve piece highlight."""
@@ -586,7 +624,6 @@ def main():
     clock = pygame.time.Clock()
 
     # Pre-load and pre-scale textures (only done once)
-
 
     while True:
         for event in pygame.event.get():
