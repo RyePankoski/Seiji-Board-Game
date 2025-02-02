@@ -79,6 +79,9 @@ class Game:
         self.promote = pygame.mixer.Sound("promote.mp3")
         self.endgame = pygame.mixer.Sound("endgame.mp3")
 
+        self.is_muted = False
+        self.mute_button_rect = pygame.Rect(10, WINDOW_SIZE - 70, 60, 60)
+
         self.background = pygame.image.load("background.png")
         self.background = pygame.transform.scale(self.background, (BOARD_SIZE * CELL_SIZE, BOARD_SIZE * CELL_SIZE))
 
@@ -398,6 +401,8 @@ class Game:
 
     def draw(self, screen):
 
+
+
         screen.blit(self.background_2, (0, 0))  # This covers the whole screen
 
         # Draw the background (wood pattern) behind the grid (just the board area)
@@ -427,6 +432,8 @@ class Game:
         # Draw valid moves for selected piece
         self.draw_valid_moves(screen)
 
+        self.draw_mute_button(screen)
+
         # Draw the selected piece highlight
         if self.selected_piece:
             row, col = self.selected_piece
@@ -447,6 +454,39 @@ class Game:
         # Draw selected reserve piece highlight
         if self.selected_reserve_piece:
             self.draw_selected_reserve_piece(screen)
+
+    def draw_mute_button(self, screen):
+        """Draw the mute button with speaker icon and volume message."""
+        # Draw button background
+        pygame.draw.rect(screen, (50, 50, 50), self.mute_button_rect, border_radius=10)
+
+        # Draw speaker icon
+        x, y = self.mute_button_rect.topleft
+        # Speaker base
+        pygame.draw.polygon(screen, WHITE, [
+            (x + 15, y + 25),  # Top-left
+            (x + 25, y + 25),  # Top-right
+            (x + 35, y + 15),  # Top point
+            (x + 35, y + 45),  # Bottom point
+            (x + 25, y + 35),  # Bottom-right
+            (x + 15, y + 35),  # Bottom-left
+        ])
+
+        # Sound waves (if not muted)
+        if not self.is_muted:
+            # First wave
+            pygame.draw.arc(screen, WHITE, (x + 35, y + 20, 10, 20), -0.5, 0.5, 2)
+            # Second wave
+            pygame.draw.arc(screen, WHITE, (x + 40, y + 15, 15, 30), -0.5, 0.5, 2)
+        else:
+            # Draw X for muted
+            pygame.draw.line(screen, RED, (x + 40, y + 15), (x + 55, y + 45), 3)
+            pygame.draw.line(screen, RED, (x + 55, y + 15), (x + 40, y + 45), 3)
+
+        # Draw volume control message
+        font = pygame.font.Font(None, 30)
+        text = font.render("Use arrows keys to adjust volume", True, BLACK)
+        screen.blit(text, (x + 70, y + 25))  # Position text to right of button, vertically centered
 
     def draw_valid_moves(self, screen):
         """Draw valid moves for selected piece."""
@@ -616,31 +656,65 @@ class Game:
         pygame.draw.rect(screen, RED, (x, y, piece_spacing, piece_spacing), 2)
 
 
+import pygame
+import sys
+from pygame import mixer  # For handling audio
+
+
 def main():
+    pygame.init()
+    mixer.init()  # Initialize the audio mixer
+
     screen = pygame.display.set_mode((WINDOW_SIZE, WINDOW_SIZE))
     pygame.display.set_caption("Board Game Prototype")
+
+    # Load and start playing the ambient track
+    try:
+        mixer.music.load('ambient_track.mp3')  # You can use .mp3, .wav, or .ogg files
+        mixer.music.set_volume(0.5)  # Set volume to 50%
+        mixer.music.play(-1)  # -1 means loop indefinitely
+    except pygame.error as e:
+        print(f"Could not load or play the music file: {e}")
+        # Game continues without music if file can't be loaded
 
     game = Game()
     clock = pygame.time.Clock()
 
-    # Pre-load and pre-scale textures (only done once)
-
     while True:
         for event in pygame.event.get():
-
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
 
+            if event.type == pygame.KEYDOWN:
+
+                if event.key == pygame.K_UP:  # Volume up
+                    current_volume = mixer.music.get_volume()
+                    mixer.music.set_volume(min(1.0, current_volume + 0.1))
+
+                elif event.key == pygame.K_DOWN:  # Volume down
+                    current_volume = mixer.music.get_volume()
+                    mixer.music.set_volume(max(0.0, current_volume - 0.1))
+
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_x, mouse_y = pygame.mouse.get_pos()
+
+                # Check if mute button was clicked
+                if game.mute_button_rect.collidepoint(mouse_x, mouse_y):
+                    game.is_muted = not game.is_muted
+                    if game.is_muted:
+                        mixer.music.set_volume(0)
+
+                    else:
+                        mixer.music.set_volume(1)
+
+                    continue
 
                 # Check if a reserve piece is clicked
                 reserve_clicked = game.check_reserve_click(mouse_x, mouse_y)
 
                 if reserve_clicked:
                     game.reserve_selected = True
-                    # You can add more logic for selecting a reserve piece if needed.
 
                 # Handle the board click if within bounds
                 col = (mouse_x - GRID_OFFSET) // CELL_SIZE
@@ -655,3 +729,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
