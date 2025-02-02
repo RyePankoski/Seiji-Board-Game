@@ -13,7 +13,7 @@ GRID_OFFSET = CELL_SIZE
 BOARD_PIXELS = BOARD_SIZE * CELL_SIZE
 RESERVE_WIDTH = CELL_SIZE * 4  # Width for the piece reserve area
 WINDOW_SIZE = BOARD_PIXELS + (GRID_OFFSET * 2) + RESERVE_WIDTH  # Total window width
-PALACE_AREA = 7
+PALACE_AREA = 5
 
 # Colors
 BLACK = (0, 0, 0)
@@ -42,6 +42,9 @@ PLAYER_2_KING = 4
 SCOUT_1 = 5
 SCOUT_2 = 6
 
+#images
+
+
 
 class Piece:
     def __init__(self, name: str, directions: List[str], move_distance: int, owner: int, promoted: False):
@@ -63,6 +66,15 @@ class Game:
         self.winner = None  # Add this
         self.reserve_selected = False
         self.selected_reserve_piece = None
+
+        self.background_2 = pygame.image.load("background_2.png")
+        self.background_2 = pygame.transform.scale(self.background_2, (WINDOW_SIZE, WINDOW_SIZE))
+        self.place_sound = pygame.mixer.Sound("place_sound.mp3")  # Replace with actual file path
+        self.slide_sound = pygame.mixer.Sound("slide_sound.mp3")
+        self.pick_up = pygame.mixer.Sound("pick_up.mp3")
+
+        self.background = pygame.image.load("background.png")
+        self.background = pygame.transform.scale(self.background, (BOARD_SIZE * CELL_SIZE, BOARD_SIZE * CELL_SIZE))
 
         self.player1_reserve = [
             ["Advisor", "Advisor"],  # First row: 2 advisors
@@ -136,6 +148,7 @@ class Game:
                         'col': col,
                         'piece_type': reserve[row][col]
                     }
+                    self.pick_up.play()
                     return True
             return False
 
@@ -298,6 +311,8 @@ class Game:
                 self.board[row][col] = king_to_place
                 self.kings_placed[self.current_player] = True
                 self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
+
+                self.place_sound.play()
             return
 
         # First priority: If we have a piece selected, handle movement
@@ -310,6 +325,9 @@ class Game:
 
                 if not self.game_over:  # Only switch players if game isn't over
                     self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
+
+                # Play slide sound when a piece is moved
+                self.slide_sound.play()
 
             elif (row, col) == self.selected_piece:
                 self.selected_piece = None
@@ -359,14 +377,24 @@ class Game:
                         reserve_to_edit[2].pop()
 
                     print(f"Player {self.board[row][col].owner} placed {self.board[row][col].name} at: {row},{col}")
+
+                    # Play place sound when a piece is placed
+                    self.place_sound.play()
+
                 else:
                     print("Invalid placement: Must place next to existing pieces")
 
     def draw(self, screen):
-        # Draw the wooden background
-        screen.fill(BROWN)
 
-        # Draw the grid
+
+        screen.blit(self.background_2, (0, 0))  # This covers the whole screen
+
+
+
+        # Draw the background (wood pattern) behind the grid (just the board area)
+        screen.blit(self.background, (GRID_OFFSET, GRID_OFFSET))
+
+        # Draw the grid on top of the wood pattern
         for i in range(BOARD_SIZE + 1):
             pygame.draw.line(screen, GRID_COLOR,
                              (GRID_OFFSET + i * CELL_SIZE, GRID_OFFSET),
@@ -525,8 +553,11 @@ class Game:
 
     def draw_game_info(self, screen):
         """Draw phase and current player info."""
+
+        display_name = "White" if self.current_player == PLAYER_1 else "Black"
+
         font = pygame.font.Font(None, 36)
-        text3 = font.render(f"Player to move: {self.current_player}", True, WHITE)
+        text3 = font.render(f"Player to move: {display_name}", True, WHITE)
         screen.blit(text3, (10, 10))
 
         # Draw game over message if applicable
@@ -554,6 +585,9 @@ def main():
     game = Game()
     clock = pygame.time.Clock()
 
+    # Pre-load and pre-scale textures (only done once)
+
+
     while True:
         for event in pygame.event.get():
 
@@ -579,7 +613,7 @@ def main():
 
         game.draw(screen)
         pygame.display.flip()
-        clock.tick(60)
+        clock.tick(15)
 
 
 if __name__ == "__main__":
