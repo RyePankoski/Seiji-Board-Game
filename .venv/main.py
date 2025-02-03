@@ -236,10 +236,12 @@ class Game:
                 print(
                     f"Captured {captured_piece_name}! Player {current_player} now has {self.pieces_in_hand[current_player]} pieces")
 
+
         # Move the piece
         print(f"Player {moving_piece.owner} moved {moving_piece.name} to: {to_row},{to_col}")
         self.board[to_row][to_col] = moving_piece
         self.board[from_row][from_col] = EMPTY
+        self.finish_move()
     def check_reserve_click(self, mouse_x, mouse_y):
         # Calculate reserve area boundaries
         reserve_start_x = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + CELL_SIZE
@@ -385,11 +387,12 @@ class Game:
 
                     # Play place sound when a piece is placed
                     self.place_sound.play()
+                    self.finish_move()
 
                 else:
                     print("Invalid placement: Must place next to existing pieces")
 
-                self.finish_move()
+
 
     def get_game_state(self):
         # Create a serializable version of the board
@@ -511,7 +514,7 @@ def main():
     clock = pygame.time.Clock()
 
     # answer = str(input("Is this a multiplayer match? y/n: "))
-    answer = "n"
+    answer = "y"
 
     if answer == "y":
         # game.connect_to_server(input("Enter IP adress to connect: "))
