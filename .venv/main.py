@@ -33,6 +33,7 @@ class Game:
         self.reserve_selected = False
         self.selected_reserve_piece = None
         self.multiplayer = False
+        self.monarch_placement_phase = True
 
         self.update_queue = queue.Queue()
         self.lock = threading.Lock()
@@ -71,6 +72,10 @@ class Game:
             for piece in row
             if piece != EMPTY and piece.name == "Monarch"
         )
+
+        if monarch_count == 2:
+            self.monarch_placement_phase = False
+
         return monarch_count < 2
     def is_enemy_piece(self, piece, player) -> bool:
         if piece.owner != player:
@@ -203,6 +208,47 @@ class Game:
                 if piece != EMPTY:
                     action = self.handle_promotion_status if self.has_friendly_adjacent_pieces(row, col) else self.demote
                     action(row, col)
+
+    def did_someone_win(self):
+
+        print("Im checking for a win")
+        """
+        Check if either monarch is missing from the board, indicating a win.
+        Updates game_over and winner states if a win is detected.
+        Returns True if there's a winner, False otherwise.
+        """
+        # Skip if game is in king placement phase
+        if self.monarch_placement_phase:
+            return False
+
+        # Initialize monarch counters for each player
+        monarchs = {PLAYER_1: False, PLAYER_2: False}
+
+        # Scan the board for monarchs
+        for row in self.board:
+            for piece in row:
+                if piece != EMPTY and piece.name == "Monarch":
+                    monarchs[piece.owner] = True
+
+        # Check if either monarch is missing
+        if not monarchs[PLAYER_1]:
+
+            self.game_over = True
+            self.winner = PLAYER_2
+            if not self.is_muted:
+                self.endgame.play()
+            return True
+
+        if not monarchs[PLAYER_2]:
+            self.game_over = True
+            self.winner = PLAYER_1
+            if not self.is_muted:
+                self.endgame.play()
+            return True
+
+        return False
+
+
     def move_piece(self, from_pos, to_pos):
         """Handle piece movement and capture logic"""
         from_row, from_col = from_pos
@@ -220,27 +266,22 @@ class Game:
         # Check if the target square contains an enemy piece
         if target_square != EMPTY and target_square.owner == enemy_player:
             captured_piece_name = target_square.name
+            self.capture.play()
+            # Add captured piece to the current player's reserve
+            piece_reserve = reserve_to_edit[0] if captured_piece_name == "Advisor" else reserve_to_edit[1]
+            if captured_piece_name != "Palace":
+                piece_reserve.append(captured_piece_name)
+            self.pieces_in_hand[current_player] += 1
+            print(
+                f"Captured {captured_piece_name}! Player {current_player} now has {self.pieces_in_hand[current_player]} pieces")
             # Handle special cases for capturing important pieces
-            if captured_piece_name == "Monarch":
-                self.endgame.play()
-                self.finish_move()
-                print(f"{'Black' if current_player == PLAYER_2 else 'White'} wins by capturing the opponent's Monarch!")
-                self.game_over = True
-                self.winner = current_player
-            else:
-                self.capture.play()
-                # Add captured piece to the current player's reserve
-                piece_reserve = reserve_to_edit[0] if captured_piece_name == "Advisor" else reserve_to_edit[1]
-                if captured_piece_name != "Palace":
-                    piece_reserve.append(captured_piece_name)
-                self.pieces_in_hand[current_player] += 1
-                print(
-                    f"Captured {captured_piece_name}! Player {current_player} now has {self.pieces_in_hand[current_player]} pieces")
+
 
         # Move the piece
         print(f"Player {moving_piece.owner} moved {moving_piece.name} to: {to_row},{to_col}")
         self.board[to_row][to_col] = moving_piece
         self.board[from_row][from_col] = EMPTY
+        self.did_someone_win()
 
     def check_reserve_click(self, mouse_x, mouse_y):
         # Calculate reserve area boundaries
@@ -310,8 +351,6 @@ class Game:
 
         # King placement phase
         if self.is_king_placement_phase():
-
-
             if self.board[row][col] == EMPTY:  # Added center area check
                 king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
                                       3, self.current_player, False)
@@ -393,8 +432,6 @@ class Game:
                 else:
                     print("Invalid placement: Must place next to existing pieces")
 
-
-
     def get_game_state(self):
         # Create a serializable version of the board
         serializable_board = []
@@ -447,6 +484,8 @@ class Game:
         self.current_player = new_state["current_player"]
         self.player1_reserve = new_state["player_1_reserve"]
         self.player2_reserve = new_state["player_2_reserve"]
+
+        self.did_someone_win()
 
     def send_game_state(self):  # Remove the connection parameter
         current_state = self.get_game_state()
