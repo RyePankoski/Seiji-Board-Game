@@ -11,8 +11,9 @@ NUMBER_OF_PIECES = 9
 CELL_SIZE = 60  # Made this explicit for clarity
 GRID_OFFSET = CELL_SIZE
 BOARD_PIXELS = BOARD_SIZE * CELL_SIZE
-RESERVE_WIDTH = CELL_SIZE * 4  # Width for the piece reserve area
-WINDOW_SIZE = BOARD_PIXELS + (GRID_OFFSET * 2) + RESERVE_WIDTH  # Total window width
+RESERVE_WIDTH = CELL_SIZE * 6  # Increased from 4 to 6 for better spacing
+WINDOW_WIDTH = BOARD_PIXELS + (GRID_OFFSET * 2) + RESERVE_WIDTH
+WINDOW_HEIGHT = BOARD_PIXELS + (GRID_OFFSET * 2) + 50
 PALACE_AREA = 5
 
 # Colors
@@ -55,6 +56,7 @@ class Piece:
         self.owner = owner
         self.promoted = promoted
         self.promote_sound_played = False
+        self.advisor_next_advisor = False
 
 
 class Game:
@@ -70,20 +72,23 @@ class Game:
         self.reserve_selected = False
         self.selected_reserve_piece = None
 
-        self.background_2 = pygame.image.load("background_2.png")
-        self.background_2 = pygame.transform.scale(self.background_2, (WINDOW_SIZE, WINDOW_SIZE))
+
         self.place_sound = pygame.mixer.Sound("place_sound.mp3")  # Replace with actual file path
         self.slide_sound = pygame.mixer.Sound("slide_sound.mp3")
         self.pick_up = pygame.mixer.Sound("pick_up.mp3")
         self.capture = pygame.mixer.Sound("capture.mp3")
         self.promote = pygame.mixer.Sound("promote.mp3")
         self.endgame = pygame.mixer.Sound("endgame.mp3")
+        self.advisor = pygame.mixer.Sound("advisor.mp3")
 
         self.is_muted = False
-        self.mute_button_rect = pygame.Rect(10, WINDOW_SIZE - 70, 60, 60)
+        self.mute_button_rect = pygame.Rect(10, WINDOW_HEIGHT - 70, 60, 60)
 
         self.background = pygame.image.load("background.png")
         self.background = pygame.transform.scale(self.background, (BOARD_SIZE * CELL_SIZE, BOARD_SIZE * CELL_SIZE))
+        self.background_2 = pygame.image.load("background_2.png")
+        self.background_2 = pygame.transform.scale(self.background_2, (WINDOW_WIDTH, WINDOW_HEIGHT))
+        self.table_texture = pygame.image.load("tables.png").convert_alpha()
 
         self.player1_reserve = [
             ["Advisor", "Advisor"],  # First row: 2 advisors
@@ -117,40 +122,57 @@ class Game:
     def check_reserve_click(self, mouse_x, mouse_y):
         # Calculate reserve area boundaries
         reserve_start_x = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + CELL_SIZE
-        reserve_end_x = WINDOW_SIZE
         piece_spacing = CELL_SIZE * 0.8
+        padding = piece_spacing * 0.5
+        max_pieces_per_row = 4
 
         # Reserve area boundaries for both players
         reserve_areas = {
-            PLAYER_1: (60, WINDOW_SIZE // 2, self.player1_reserve),
-            PLAYER_2: (WINDOW_SIZE // 2 + 40, WINDOW_SIZE, self.player2_reserve)
+            PLAYER_1: (60, WINDOW_HEIGHT // 2, self.player1_reserve),
+            PLAYER_2: (WINDOW_HEIGHT // 2 - 60, WINDOW_HEIGHT - 60, self.player2_reserve)
         }
 
-        # Early return if click is outside reserve area x-coordinates
-        if mouse_x < reserve_start_x or mouse_x > reserve_end_x:
+        if mouse_x < reserve_start_x:
             return False
 
         # Helper function to process reserve click
-        def process_reserve_click(start_y, end_y, reserve, player):
+        def process_reserve_click(start_y, end_y, reserve):
             if start_y <= mouse_y <= end_y:
-                row = int((mouse_y - start_y) // piece_spacing)
-                col = int((mouse_x - reserve_start_x) // piece_spacing)
+                current_y = start_y + padding
+                col = int((mouse_x - (reserve_start_x + padding)) // piece_spacing)
 
-                if row < len(reserve) and col < len(reserve[row]):
-                    self.selected_reserve_piece = {
-                        'player': player,
-                        'row': row,
-                        'col': col,
-                        'piece_type': reserve[row][col]
-                    }
-                    self.pick_up.play()
-                    return True
-            return False
+                # Find which section was clicked
+                for section_idx, section in enumerate(reserve):
+                    num_pieces = len(section)
+                    rows_needed = (num_pieces + max_pieces_per_row - 1) // max_pieces_per_row
+                    section_height = rows_needed * piece_spacing + padding
 
-        # Check the current player's reserve area
+                    if current_y <= mouse_y < current_y + section_height:
+                        # Calculate row within this section
+                        relative_y = mouse_y - current_y
+                        row = int(relative_y // piece_spacing)
+
+                        # Calculate piece index and verify it exists
+                        piece_idx = (row * max_pieces_per_row) + col
+                        if 0 <= col < max_pieces_per_row and piece_idx < len(section):
+                            self.selected_reserve_piece = {
+                                'player': self.current_player,
+                                'section': section_idx,
+                                'piece_type': section[piece_idx],
+                                'row': row,
+                                'col': col
+                            }
+                            return True
+
+                    current_y += section_height
+
+                return False
+
+        # Check current player's reserve area
         if self.current_player in reserve_areas:
             start_y, end_y, reserve = reserve_areas[self.current_player]
-            if process_reserve_click(start_y, end_y, reserve, self.current_player):
+            if process_reserve_click(start_y, end_y, reserve):
+                self.pick_up.play()
                 return True
 
         self.selected_reserve_piece = None
@@ -201,6 +223,7 @@ class Game:
     def demote(self, row, col):
         piece_to_demote = self.board[row][col]
         piece_to_demote.promoted = False
+        piece_to_demote.advisor_next_advisor = False
 
         demotion_settings = {
             "Official": ([(1, 0), (0, 1), (-1, 0), (0, -1)], 1),
@@ -212,12 +235,21 @@ class Game:
         if piece_to_demote.name in demotion_settings:
             piece_to_demote.directions, piece_to_demote.move_distance = demotion_settings[piece_to_demote.name]
 
+
     def should_I_promote_piece(self, row, col):
         promoting_piece = self.board[row][col]
         adjacent_pieces = self.has_friendly_adjacent_pieces(row, col)
 
+        if promoting_piece.name == "Monarch" and adjacent_pieces != {"Advisor","Official"}:
+            self.demote(row,col)
+        if promoting_piece.name == "Advisor" and "Monarch" not in adjacent_pieces:
+            self.demote(row,col)
+        if promoting_piece.name == "Official" and "Monarch" not in adjacent_pieces and "Official" not in adjacent_pieces:
+            self.demote(row,col)
+
         if not adjacent_pieces or adjacent_pieces == {"Palace"}:
             self.demote(row, col)
+            self.advisor_next_advisor = False
             return
 
         def promote(piece, move_distance=0, new_directions=None):
@@ -234,21 +266,17 @@ class Game:
             if {"Official", "Advisor"}.issubset(adjacent_pieces):
                 promote(promoting_piece, move_distance=3)
 
+        elif name == "Advisor":
+            if "Monarch" in adjacent_pieces:
+                promote(promoting_piece, 3, new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0),
+                                              (0, -1)])
         elif name == "Official":
             if "Monarch" in adjacent_pieces:
                 promote(promoting_piece, 1,
                         new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0), (0, -1)])
             elif "Advisor" in adjacent_pieces:
-                promote(promoting_piece, move_distance=3)
-            elif "Official" in adjacent_pieces:
                 promote(promoting_piece, move_distance=2)
 
-        elif name == "Advisor":
-            if "Monarch" in adjacent_pieces or "Official" in adjacent_pieces:
-                promote(promoting_piece, 3, new_directions=[(1, 1), (-1, -1), (-1, 1), (1, -1)])
-            elif "Advisor" in adjacent_pieces:
-                promoting_piece.directions = [(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0),
-                                              (0, -1)]  # Set directions directly
 
     def move_piece(self, from_pos, to_pos):
         """Handle piece movement and capture logic"""
@@ -320,13 +348,13 @@ class Game:
 
         # King placement phase
         if self.is_king_placement_phase():
-            if self.board[row][col] == EMPTY:
+
+            if self.board[row][col] == EMPTY:  # Added center area check
                 king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
                                       2, self.current_player, False)
                 self.board[row][col] = king_to_place
                 self.kings_placed[self.current_player] = True
                 self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
-
                 self.place_sound.play()
             return
 
@@ -400,22 +428,35 @@ class Game:
                     print("Invalid placement: Must place next to existing pieces")
 
     def draw(self, screen):
-        screen.blit(self.background_2, (0, 0))  # This covers the whole screen
 
-        # Draw the background (wood pattern) behind the grid (just the board area)
+
+        screen.blit(self.background_2, (0, 0))  # This covers the whole screen
         screen.blit(self.background, (GRID_OFFSET, GRID_OFFSET))
 
-        # Draw the grid on top of the wood pattern
+        center_x = GRID_OFFSET + (BOARD_SIZE // 2) * CELL_SIZE
+        center_y = GRID_OFFSET + (BOARD_SIZE // 2) * CELL_SIZE
+        # Draw the X
+        pygame.draw.line(screen, GRID_COLOR,
+                        (center_x, center_y),
+                        (center_x + CELL_SIZE, center_y + CELL_SIZE),
+                        width=2)
+        pygame.draw.line(screen, GRID_COLOR,
+                        (center_x + CELL_SIZE, center_y),
+                        (center_x, center_y + CELL_SIZE),
+                        width=2)
+
         for i in range(BOARD_SIZE + 1):
             pygame.draw.line(screen, GRID_COLOR,
                              (GRID_OFFSET + i * CELL_SIZE, GRID_OFFSET),
-                             (GRID_OFFSET + i * CELL_SIZE, GRID_OFFSET + BOARD_SIZE * CELL_SIZE))
+                             (GRID_OFFSET + i * CELL_SIZE, GRID_OFFSET + BOARD_SIZE * CELL_SIZE),
+                             width=1)  # Added width parameter
             pygame.draw.line(screen, GRID_COLOR,
                              (GRID_OFFSET, GRID_OFFSET + i * CELL_SIZE),
-                             (GRID_OFFSET + BOARD_SIZE * CELL_SIZE, GRID_OFFSET + i * CELL_SIZE))
+                             (GRID_OFFSET + BOARD_SIZE * CELL_SIZE, GRID_OFFSET + i * CELL_SIZE),
+                             width=1)  # Added width parameter
 
         # Show valid placement squares for piece placement phase
-        # Show valid placement squares for piece placement phase
+
         if not self.selected_piece and not self.is_king_placement_phase() and len(
                 self.player1_reserve[0] + self.player1_reserve[1]) > 0 and self.reserve_selected:
             valid_placements = self.get_valid_placement_squares()
@@ -463,9 +504,15 @@ class Game:
         if self.selected_reserve_piece:
             self.draw_selected_reserve_piece(screen)
 
+    # Gray background box added above the existing code
     def draw_mute_button(self, screen):
         """Draw the mute button with speaker icon and volume message."""
-        # Draw button background
+        # Draw button background with gray box
+        button_bg_rect = pygame.Rect(self.mute_button_rect)
+        button_bg_rect.inflate_ip(700, 10)  # Make background box bigger than button
+        pygame.draw.rect(screen, (200, 200, 200), button_bg_rect)  # Light gray background
+
+        # Original button code
         pygame.draw.rect(screen, (50, 50, 50), self.mute_button_rect, border_radius=10)
 
         # Draw speaker icon
@@ -577,42 +624,55 @@ class Game:
     def draw_piece_reserve(self, screen):
         """Draw the piece reserve area on the right side."""
         reserve_start_x = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + CELL_SIZE
-        piece_spacing = CELL_SIZE * 0.8  # Slightly smaller than board pieces
-
-        # Draw headers for piece reserves
-        font = pygame.font.Font(None, 36)
-        text_white = font.render("White Pieces", True, WHITE)
-        text_black = font.render("Black Pieces", True, BLACK)
-        screen.blit(text_white, (reserve_start_x, 20))
-        screen.blit(text_black, (reserve_start_x, WINDOW_SIZE // 2))
+        piece_spacing = CELL_SIZE * 2 # Slightly smaller than board pieces
 
         # Draw White's pieces from reserve array
         self.draw_reserve_pieces(screen, self.player1_reserve, reserve_start_x, 60, WHITE, BLACK)
 
         # Draw Black's pieces from reserve array
-        self.draw_reserve_pieces(screen, self.player2_reserve, reserve_start_x, WINDOW_SIZE // 2 + 40, BLACK, WHITE)
+        self.draw_reserve_pieces(screen, self.player2_reserve, reserve_start_x, WINDOW_HEIGHT // 2 - 60, BLACK, WHITE)
 
     def draw_reserve_pieces(self, screen, reserve, reserve_start_x, y_offset, piece_color, contrast_color):
-        """Draw pieces from the reserve."""
         piece_spacing = CELL_SIZE * 0.8
-        for row_idx, row in enumerate(reserve):
-            for col_idx, piece_type in enumerate(row):
-                # Calculate x and y positions for each piece
-                x = reserve_start_x + (col_idx * piece_spacing)
-                y = y_offset + (row_idx * piece_spacing)
+        max_pieces_per_row = 4
+        padding = piece_spacing * 0.5
 
-                # Check if the piece is within the screen width and height
-                if x + piece_spacing > WINDOW_SIZE:  # If the piece goes off the screen to the right
-                    continue  # Skip drawing this piece
-                if y + piece_spacing > WINDOW_SIZE:  # If the piece goes off the screen downward
-                    continue  # Skip drawing this piece
+        # Calculate size based on maximum possible content
+        max_possible_rows = (
+                2 +  # Advisors row (max 2 pieces = 1 row)
+                2 +  # Officials row (max 7 pieces = 2 rows)
+                1  # Palace row (max 1 piece = 1 row)
+        )
+
+        # Make table big enough to fit maximum possible pieces plus padding
+        table_size = max(
+            (max_pieces_per_row * piece_spacing) + (padding * 3),  # width needed
+            (max_possible_rows * piece_spacing) + (padding * 4)  # height needed for maximum case
+        )
+
+        # Scale texture to fixed square size
+        table_texture = pygame.transform.scale(self.table_texture, (int(table_size), int(table_size)))
+        screen.blit(table_texture, (reserve_start_x, y_offset))
+
+        # Draw pieces starting from the top of the table
+        current_y = y_offset + padding
+        for section in reserve:
+            num_pieces = len(section)
+            rows_needed = (num_pieces + max_pieces_per_row - 1) // max_pieces_per_row
+
+            for piece_idx, piece_type in enumerate(section):
+                row = piece_idx // max_pieces_per_row
+                col = piece_idx % max_pieces_per_row
+
+                x = reserve_start_x + (col * piece_spacing) + padding
+                y = current_y + (row * piece_spacing)
 
                 # Draw the piece
                 pygame.draw.circle(screen, piece_color,
                                    (int(x + piece_spacing / 2), int(y + piece_spacing / 2)),
                                    int(piece_spacing / 2 - 5))
 
-                # Draw specific piece type (Advisor or Palace)
+                # Draw piece type indicators
                 if piece_type == "Advisor":
                     pygame.draw.circle(screen, contrast_color,
                                        (int(x + piece_spacing / 2), int(y + piece_spacing / 2)),
@@ -623,6 +683,8 @@ class Game:
                                       int(y + piece_spacing / 2 - piece_spacing / 4),
                                       piece_spacing / 2, piece_spacing / 2))
 
+            # Update current_y for next section
+            current_y += rows_needed * piece_spacing + padding
     def draw_game_info(self, screen):
         """Draw phase and current player info."""
 
@@ -641,7 +703,7 @@ class Game:
             text5 = end_game_font.render(winner_text, True, YELLOW)
 
             # Get the width and height of the text to center it
-            text_rect = text5.get_rect(center=(WINDOW_SIZE // 2, WINDOW_SIZE // 2))
+            text_rect = text5.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
 
             # Create a black outline effect by drawing the text in all 8 directions
             outline_offset = 5
@@ -668,13 +730,28 @@ class Game:
             screen.blit(text5, text_rect)
 
     def draw_selected_reserve_piece(self, screen):
-        """Draw selected reserve piece highlight."""
         reserve_start_x = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + CELL_SIZE
         piece_spacing = CELL_SIZE * 0.8
-        y_offset = 60 if self.selected_reserve_piece['player'] == PLAYER_1 else WINDOW_SIZE // 2 + 40
+        padding = piece_spacing * 0.5
+        max_pieces_per_row = 4
 
-        x = reserve_start_x + (self.selected_reserve_piece['col'] * piece_spacing)
-        y = y_offset + (self.selected_reserve_piece['row'] * piece_spacing)
+        y_offset = 60 if self.selected_reserve_piece['player'] == PLAYER_1 else WINDOW_HEIGHT // 2 - 60
+
+        # Find the correct y position by calculating cumulative height
+        current_y = y_offset + padding
+        reserve = self.player1_reserve if self.selected_reserve_piece['player'] == PLAYER_1 else self.player2_reserve
+
+        for section_idx in range(self.selected_reserve_piece['section']):
+            num_pieces = len(reserve[section_idx])
+            rows_needed = (num_pieces + max_pieces_per_row - 1) // max_pieces_per_row
+            current_y += rows_needed * piece_spacing + padding
+
+        # Use stored row and col values directly
+        row = self.selected_reserve_piece['row']
+        col = self.selected_reserve_piece['col']
+
+        x = reserve_start_x + (col * piece_spacing) + padding
+        y = current_y + (row * piece_spacing)
 
         pygame.draw.rect(screen, RED, (x, y, piece_spacing, piece_spacing), 2)
 
@@ -688,7 +765,7 @@ def main():
     pygame.init()
     mixer.init()  # Initialize the audio mixer
 
-    screen = pygame.display.set_mode((WINDOW_SIZE, WINDOW_SIZE))
+    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Board Game Prototype")
 
     # Load and start playing the ambient track
