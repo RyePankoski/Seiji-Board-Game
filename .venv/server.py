@@ -1,49 +1,82 @@
 import socket
 import threading
-import json  # for converting game state to string
+import json
+import queue
 
 
-def handle_client(conn, addr):
-    print(f"Connected by {addr}")
-    while True:
+class GameServer:
+    def __init__(self):
+        self.clients = []  # List to store client connections
+        self.game_states = {}  # Dictionary to store game states for each client
+        self.lock = threading.Lock()
+
+    def handle_client(self, conn, addr):
+        print(f"Connected by {addr}")
+
+        # Add client to list
+        with self.lock:
+            self.clients.append(conn)
+            client_id = len(self.clients) - 1
+
         try:
-            # Receive game state
-            data = conn.recv(1024)
+            while True:
+                # Receive game state from client
+                data = conn.recv(4096)  # Increased buffer size
 
-            print("Receiving something")
+                if not data:
+                    print(f"Client {addr} disconnected")
+                    break
 
-            if not data:
-                print("No data recieved or it was null")
-                break
+                print("Recieving data")
+                # Parse the received game state
+                game_state = json.loads(data.decode())
 
-            # Convert received data to game state
-            game_state = json.loads(data.decode())
+                # Store this client's game state
+                with self.lock:
+                    self.game_states[client_id] = game_state
 
-            # Update your game with new state
-            update_game(game_state)
+                    # Broadcast to other client
+                    for i, client in enumerate(self.clients):
+                        if i != client_id:  # Don't send back to the sender
+                            try:
+                                client.send(data)
+                            except:
+                                print(f"Failed to send to client {i}")
 
-            # Send your game state back
-            your_game_state = get_game_state()  # your function to get current state
-            conn.send(json.dumps(your_game_state).encode())
+        except Exception as e:
+            print(f"Error handling client {addr}: {e}")
+        finally:
+            # Clean up when client disconnects
+            with self.lock:
+                if conn in self.clients:
+                    self.clients.remove(conn)
+                if client_id in self.game_states:
+                    del self.game_states[client_id]
+            conn.close()
 
-        except:
-            break
+    def start(self, host='0.0.0.0', port=5555):
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.bind(("192.168.0.15", 5555))
+        server.listen()
+        print(f"Server is listening on {host}:{port}")
 
-    conn.close()
-
-
-def start_server():
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(('192.168.0.15', 5555))  # Empty string means bind to all available interfaces
-    server.listen()
-    print(f"Server is listening on port 5555...")
-
-    while True:
-        conn, addr = server.accept()
-        thread = threading.Thread(target=handle_client, args=(conn, addr))
-        thread.start()
-        print(f"Active connections: {threading.active_count() - 1}")
+        try:
+            while True:
+                conn, addr = server.accept()
+                # Only allow 2 players
+                if len(self.clients) < 2:
+                    thread = threading.Thread(target=self.handle_client, args=(conn, addr))
+                    thread.start()
+                    print(f"Active connections: {len(self.clients)}")
+                else:
+                    print(f"Rejected connection from {addr}: game full")
+                    conn.close()
+        except Exception as e:
+            print(f"Server error: {e}")
+        finally:
+            server.close()
 
 
 if __name__ == "__main__":
-    start_server()
+    server = GameServer()
+    server.start()

@@ -6,6 +6,7 @@ from constants import *
 import socket
 import json
 import threading
+import queue
 
 # Initialize Pygame
 pygame.init()
@@ -32,6 +33,9 @@ class Game:
         self.reserve_selected = False
         self.selected_reserve_piece = None
         self.multiplayer = False
+
+        self.update_queue = queue.Queue()
+        self.lock = threading.Lock()
 
         self.place_sound = pygame.mixer.Sound("place_sound.mp3")  # Replace with actual file path
         self.slide_sound = pygame.mixer.Sound("slide_sound.mp3")
@@ -437,6 +441,7 @@ class Game:
         current_state = self.get_game_state()
         try:
             state_string = json.dumps(current_state)
+            print("Client says: 'Sending data'")
             self.socket.send(state_string.encode())  # Use self.socket instead of connection
         except Exception as e:
             print(f"Error sending game state: {e}")
@@ -454,12 +459,25 @@ class Game:
     def network_thread(self):
         while True:
             try:
-                data = self.socket.recv(1024)
+                data = self.socket.recv(4096)  # Increased buffer size
                 if data:
                     new_state = json.loads(data.decode())
-                    self.update_game_state(new_state)
-            except:
+                    # Instead of updating directly, put the state in the queue
+                    print("Client says: 'Pushing data into queue'")
+                    self.update_queue.put(new_state)
+            except Exception as e:
+                print(f"Network error: {e}")
                 break
+
+    def process_network_updates(self):
+        """Process any pending network updates - call this in the main game loop"""
+        try:
+            while not self.update_queue.empty():
+                new_state = self.update_queue.get_nowait()
+                with self.lock:
+                    self.update_game_state(new_state)
+        except queue.Empty:
+            pass  # No updates to process
 
 
 import pygame
@@ -469,7 +487,6 @@ from pygame import mixer  # For handling audio
 def main():
     pygame.init()
     mixer.init()
-
 
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Board Game Prototype")
@@ -537,6 +554,8 @@ def main():
                 row = (mouse_y - GRID_OFFSET) // CELL_SIZE
                 if 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE:
                     game.handle_click(row, col)
+
+        game.process_network_updates()
 
         DrawUtils.draw(game, screen)
         pygame.display.flip()
