@@ -457,8 +457,7 @@ class Game:
 
         # Show valid placement squares for piece placement phase
 
-        if not self.selected_piece and not self.is_king_placement_phase() and len(
-                self.player1_reserve[0] + self.player1_reserve[1]) > 0 and self.reserve_selected:
+        if not self.selected_piece and not self.is_king_placement_phase()  and self.reserve_selected:
             valid_placements = self.get_valid_placement_squares()
             for row, col in valid_placements:
                 if self.board[row][col] == EMPTY:  # Only highlight empty squares
