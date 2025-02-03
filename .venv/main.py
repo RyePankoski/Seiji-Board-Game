@@ -553,12 +553,11 @@ def main():
     game = Game()
     clock = pygame.time.Clock()
 
-    # answer = str(input("Is this a multiplayer match? y/n: "))
-    answer = "y"
+    answer = str(input("Is this a multiplayer match? y/n: "))
 
     if answer == "y":
-        # game.connect_to_server(input("Enter IP adress to connect: "))
-        game.connect_to_server("174.29.188.233")
+        print("174.29.188.233")
+        game.connect_to_server(input("Enter IP adress to connect: "))
         game.multiplayer = True
     else:
         game.multiplayer = False
