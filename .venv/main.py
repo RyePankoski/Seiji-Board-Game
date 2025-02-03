@@ -223,6 +223,7 @@ class Game:
             # Handle special cases for capturing important pieces
             if captured_piece_name == "Monarch":
                 self.endgame.play()
+                self.finish_move()
                 print(f"{'Black' if current_player == PLAYER_2 else 'White'} wins by capturing the opponent's Monarch!")
                 self.game_over = True
                 self.winner = current_player
@@ -236,12 +237,11 @@ class Game:
                 print(
                     f"Captured {captured_piece_name}! Player {current_player} now has {self.pieces_in_hand[current_player]} pieces")
 
-
         # Move the piece
         print(f"Player {moving_piece.owner} moved {moving_piece.name} to: {to_row},{to_col}")
         self.board[to_row][to_col] = moving_piece
         self.board[from_row][from_col] = EMPTY
-        self.finish_move()
+
     def check_reserve_click(self, mouse_x, mouse_y):
         # Calculate reserve area boundaries
         reserve_start_x = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + CELL_SIZE
@@ -335,6 +335,7 @@ class Game:
 
                 # Play slide sound when a piece is moved
                 self.slide_sound.play()
+                self.finish_move()
 
             elif (row, col) == self.selected_piece:
                 self.selected_piece = None
