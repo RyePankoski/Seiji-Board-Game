@@ -2,52 +2,10 @@ import pygame
 import sys
 from typing import List
 from draw_utils import DrawUtils
+from constants import *
 
 # Initialize Pygame
 pygame.init()
-
-# Constants
-BOARD_SIZE = 15
-NUMBER_OF_PIECES = 9
-CELL_SIZE = 60  # Made this explicit for clarity
-GRID_OFFSET = CELL_SIZE
-BOARD_PIXELS = BOARD_SIZE * CELL_SIZE
-RESERVE_WIDTH = CELL_SIZE * 6  # Increased from 4 to 6 for better spacing
-WINDOW_WIDTH = BOARD_PIXELS + (GRID_OFFSET * 2) + RESERVE_WIDTH
-WINDOW_HEIGHT = BOARD_PIXELS + (GRID_OFFSET * 2) + 50
-PALACE_AREA = 5
-
-# Colors
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-BROWN = (139, 69, 19)
-GRID_COLOR = (20, 20, 20)
-NEW = (50, 50, 50)
-
-PLACE_HIGHLIGHT_PLAYER1 = (0, 255, 0, 128)
-PLACE_HIGHLIGHT_PLAYER2 = (255, 180, 255, 128)
-MOVE_HIGHLIGHT_PLAYER1 = (0, 127, 0, 128)
-MOVE_HIGHLIGHT_PLAYER2 = (127, 90, 127, 128)
-
-RED = (255, 50, 50)
-GOLD = (50, 150, 10)
-PURPLE = (255, 0, 255)
-PLAYER_1_COLOR = (255, 255, 255)
-PLAYER_2_COLOR = (0, 0, 0)
-YELLOW = (255, 200, 50)
-
-# Game constants
-EMPTY = 0
-PLAYER_1 = 1
-PLAYER_2 = 2
-PLAYER_1_KING = 3
-PLAYER_2_KING = 4
-SCOUT_1 = 5
-SCOUT_2 = 6
-
-
-# images
-
 
 class Piece:
     def __init__(self, name, directions, move_distance, owner, promoted=False):
@@ -57,8 +15,6 @@ class Piece:
         self.owner = owner
         self.promoted = promoted
         self.promote_sound_played = False
-        self.advisor_next_advisor = False
-
 
 class Game:
     def __init__(self):
@@ -79,7 +35,6 @@ class Game:
         self.capture = pygame.mixer.Sound("capture.mp3")
         self.promote = pygame.mixer.Sound("promote.mp3")
         self.endgame = pygame.mixer.Sound("endgame.mp3")
-        self.advisor = pygame.mixer.Sound("advisor.mp3")
 
         self.is_muted = False
         self.mute_button_rect = pygame.Rect(10, WINDOW_HEIGHT - 70, 60, 60)
@@ -91,16 +46,15 @@ class Game:
         self.table_texture = pygame.image.load("tables.png").convert_alpha()
 
         self.player1_reserve = [
-            ["Advisor", "Advisor"],  # First row: 2 advisors
-            ["Official"] * 7,
-            ["Palace"]
+            ["Advisor"] * ADVISOR_NUMBER,  # First row: 2 advisors
+            ["Official"] * OFFICIAL_NUMBER,
+            ["Palace"] * PALACE_NUMBER
         ]
         self.player2_reserve = [
-            ["Advisor", "Advisor"],
-            ["Official"] * 7,
-            ["Palace"]
+            ["Advisor"] * ADVISOR_NUMBER,  # First row: 2 advisors
+            ["Official"] * OFFICIAL_NUMBER,
+            ["Palace"] * PALACE_NUMBER
         ]
-
     def is_king_placement_phase(self):
         """Check if we're still in the king placement phase"""
         return not (self.kings_placed[PLAYER_1] and self.kings_placed[PLAYER_2])
@@ -122,7 +76,6 @@ class Game:
                and (adjacent_piece := self.board[new_row][new_col]) != EMPTY
                and adjacent_piece.owner == piece.owner
         }
-
         return adjacent_pieces
     def get_valid_moves(self, row, col):
         """Get valid moves based on piece type."""
@@ -184,7 +137,7 @@ class Game:
             "Official": ([(1, 0), (0, 1), (-1, 0), (0, -1)], 1),
             "Advisor": ([(1, 1), (1, -1), (-1, -1), (-1, 1)], 3),
             "Monarch": ([(-1, 0), (1, 0), (0, -1), (0, 1),
-                         (-1, -1), (1, 1), (-1, 1), (1, -1)], 2)
+                         (-1, -1), (1, 1), (-1, 1), (1, -1)], 3)
         }
 
         if piece_to_demote.name in demotion_settings:
@@ -263,7 +216,8 @@ class Game:
                 self.capture.play()
                 # Add captured piece to the current player's reserve
                 piece_reserve = reserve_to_edit[0] if captured_piece_name == "Advisor" else reserve_to_edit[1]
-                piece_reserve.append(captured_piece_name)
+                if captured_piece_name != "Palace":
+                    piece_reserve.append(captured_piece_name)
                 self.pieces_in_hand[current_player] += 1
                 print(
                     f"Captured {captured_piece_name}! Player {current_player} now has {self.pieces_in_hand[current_player]} pieces")
@@ -339,7 +293,7 @@ class Game:
 
             if self.board[row][col] == EMPTY:  # Added center area check
                 king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
-                                      2, self.current_player, False)
+                                      3, self.current_player, False)
                 self.board[row][col] = king_to_place
                 self.kings_placed[self.current_player] = True
                 self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
