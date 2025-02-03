@@ -3,6 +3,9 @@ import sys
 from typing import List
 from draw_utils import DrawUtils
 from constants import *
+import socket
+import json
+import threading
 
 # Initialize Pygame
 pygame.init()
@@ -28,6 +31,7 @@ class Game:
         self.winner = None  # Add this
         self.reserve_selected = False
         self.selected_reserve_piece = None
+        self.multiplayer = False
 
         self.place_sound = pygame.mixer.Sound("place_sound.mp3")  # Replace with actual file path
         self.slide_sound = pygame.mixer.Sound("slide_sound.mp3")
@@ -284,7 +288,11 @@ class Game:
 
         self.selected_reserve_piece = None
         return False
+    def finish_move(self):
+        if self.multiplayer == True:
+            self.send_game_state()
     def handle_click(self, row, col):
+
         if self.game_over:
             return
 
@@ -298,6 +306,7 @@ class Game:
                 self.kings_placed[self.current_player] = True
                 self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
                 self.place_sound.play()
+                self.finish_move()
             return
 
         # First priority: If we have a piece selected, handle movement
@@ -369,15 +378,57 @@ class Game:
                 else:
                     print("Invalid placement: Must place next to existing pieces")
 
+                self.finish_move()
+    def get_game_state(self):
+        return {
+            "board": self.board,
+            "current_player": self.current_player,
+            "player_1_reserve": self.player1_reserve,
+            "player_2_reserve": self.player2_reserve
+        }
+    def update_game_state(new_state):
+        self.board = new_state["board"]
+        self.current_player = new_state["current_player"]
+        self.player1_reserve = new_state["player_1_reserve"]
+        self.player2_reserve = new_state["player_2_reserve"]
+
+    def send_game_state(connection):
+        current_state = self.get_game_state()
+        try:
+            state_string = json.dumps(current_state)
+            connection.send(state_string.encode())
+        except Exception as e:
+            print(f"Error sending game state: {e}")
+
+    def connect_to_server(self, server_ip="localhost"):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            self.socket.connect((server_ip, 5555))
+            print("Connected to server!")
+            # Start network thread to receive updates
+            threading.Thread(target=self.network_thread, daemon=True).start()
+        except Exception as e:
+            print(f"Couldn't connect to server: {e}")
+
+    def network_thread(self):
+        while True:
+            try:
+                data = self.socket.recv(1024)
+                if data:
+                    new_state = json.loads(data.decode())
+                    self.update_game_state(new_state)
+            except:
+                break
+
 
 import pygame
 import sys
 from pygame import mixer  # For handling audio
 
-
 def main():
     pygame.init()
-    mixer.init()  # Initialize the audio mixer
+    mixer.init()
+
 
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Board Game Prototype")
@@ -393,6 +444,14 @@ def main():
 
     game = Game()
     clock = pygame.time.Clock()
+
+    answer = str(input("Is this a multiplayer match? y/n: "))
+
+    if answer == "y":
+        game.connect_to_server(input("Enter IP adress to connect: "))
+        game.multiplayer = True
+    else:
+        game.multiplayer = False
 
     while True:
         for event in pygame.event.get():

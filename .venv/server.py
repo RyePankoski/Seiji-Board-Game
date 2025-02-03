@@ -30,7 +30,7 @@ def handle_client(conn, addr):
 
 def start_server():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(('', 5555))  # Empty string means bind to all available interfaces
+    server.bind(('192.168.0.15', 5555))  # Empty string means bind to all available interfaces
     server.listen()
     print(f"Server is listening on port 5555...")
 
