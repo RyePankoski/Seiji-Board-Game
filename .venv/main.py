@@ -63,9 +63,15 @@ class Game:
             ["Official"] * OFFICIAL_NUMBER,
             ["Palace"] * PALACE_NUMBER
         ]
+
     def is_king_placement_phase(self):
-        """Check if we're still in the king placement phase"""
-        return not (self.kings_placed[PLAYER_1] and self.kings_placed[PLAYER_2])
+        """Check if we're still in the king placement phase by counting Monarchs on the board"""
+        monarch_count = sum(
+            1 for row in self.board
+            for piece in row
+            if piece != EMPTY and piece.name == "Monarch"
+        )
+        return monarch_count < 2
     def is_enemy_piece(self, piece, player) -> bool:
         if piece.owner != player:
             return True
@@ -303,6 +309,7 @@ class Game:
         # King placement phase
         if self.is_king_placement_phase():
 
+
             if self.board[row][col] == EMPTY:  # Added center area check
                 king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
                                       3, self.current_player, False)
@@ -463,7 +470,7 @@ class Game:
                 if data:
                     new_state = json.loads(data.decode())
                     # Instead of updating directly, put the state in the queue
-                    print("Client says: 'Pushing data into queue'")
+                    print("Client says: 'Pushing recieved data into queue'")
                     self.update_queue.put(new_state)
             except Exception as e:
                 print(f"Network error: {e}")
@@ -504,7 +511,7 @@ def main():
     clock = pygame.time.Clock()
 
     # answer = str(input("Is this a multiplayer match? y/n: "))
-    answer = "y"
+    answer = "n"
 
     if answer == "y":
         # game.connect_to_server(input("Enter IP adress to connect: "))
@@ -514,6 +521,7 @@ def main():
         game.multiplayer = False
 
     while True:
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
