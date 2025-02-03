@@ -379,24 +379,65 @@ class Game:
                     print("Invalid placement: Must place next to existing pieces")
 
                 self.finish_move()
+
     def get_game_state(self):
+        # Create a serializable version of the board
+        serializable_board = []
+        for row in self.board:
+            board_row = []
+            for piece in row:
+                if piece == 0:
+                    board_row.append(0)
+                else:
+                    # Convert Piece object to a dictionary with all its properties
+                    board_row.append({
+                        "name": piece.name,
+                        "directions": piece.directions,
+                        "move_distance": piece.move_distance,
+                        "owner": piece.owner,
+                        "promoted": piece.promoted,
+                        "promote_sound_played": piece.promote_sound_played
+                    })
+            serializable_board.append(board_row)
+
         return {
-            "board": self.board,
+            "board": serializable_board,
             "current_player": self.current_player,
             "player_1_reserve": self.player1_reserve,
             "player_2_reserve": self.player2_reserve
         }
-    def update_game_state(new_state):
-        self.board = new_state["board"]
+
+    def update_game_state(self, new_state):
+        # Convert the serialized board back to Piece objects
+        board = []
+        for row in new_state["board"]:
+            board_row = []
+            for cell in row:
+                if cell == 0:
+                    board_row.append(0)
+                else:
+                    # Reconstruct the Piece object from the dictionary
+                    piece = Piece(
+                        name=cell["name"],
+                        directions=cell["directions"],
+                        move_distance=cell["move_distance"],
+                        owner=cell["owner"],
+                        promoted=cell["promoted"]
+                    )
+                    piece.promote_sound_played = cell["promote_sound_played"]
+                    board_row.append(piece)
+            board.append(board_row)
+
+        self.board = board
         self.current_player = new_state["current_player"]
         self.player1_reserve = new_state["player_1_reserve"]
         self.player2_reserve = new_state["player_2_reserve"]
 
-    def send_game_state(connection):
+    def send_game_state(self):  # Remove the connection parameter
         current_state = self.get_game_state()
         try:
             state_string = json.dumps(current_state)
-            connection.send(state_string.encode())
+            self.socket.send(state_string.encode())  # Use self.socket instead of connection
         except Exception as e:
             print(f"Error sending game state: {e}")
 
@@ -445,10 +486,12 @@ def main():
     game = Game()
     clock = pygame.time.Clock()
 
-    answer = str(input("Is this a multiplayer match? y/n: "))
+    # answer = str(input("Is this a multiplayer match? y/n: "))
+    answer = "y"
 
     if answer == "y":
-        game.connect_to_server(input("Enter IP adress to connect: "))
+        # game.connect_to_server(input("Enter IP adress to connect: "))
+        game.connect_to_server("174.29.188.233")
         game.multiplayer = True
     else:
         game.multiplayer = False

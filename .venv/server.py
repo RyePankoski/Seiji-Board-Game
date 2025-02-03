@@ -9,7 +9,11 @@ def handle_client(conn, addr):
         try:
             # Receive game state
             data = conn.recv(1024)
+
+            print("Receiving something")
+
             if not data:
+                print("No data recieved or it was null")
                 break
 
             # Convert received data to game state
