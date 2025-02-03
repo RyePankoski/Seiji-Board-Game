@@ -400,9 +400,6 @@ class Game:
                     print("Invalid placement: Must place next to existing pieces")
 
     def draw(self, screen):
-
-
-
         screen.blit(self.background_2, (0, 0))  # This covers the whole screen
 
         # Draw the background (wood pattern) behind the grid (just the board area)
@@ -418,16 +415,27 @@ class Game:
                              (GRID_OFFSET + BOARD_SIZE * CELL_SIZE, GRID_OFFSET + i * CELL_SIZE))
 
         # Show valid placement squares for piece placement phase
+        # Show valid placement squares for piece placement phase
         if not self.selected_piece and not self.is_king_placement_phase() and len(
                 self.player1_reserve[0] + self.player1_reserve[1]) > 0 and self.reserve_selected:
             valid_placements = self.get_valid_placement_squares()
             for row, col in valid_placements:
                 if self.board[row][col] == EMPTY:  # Only highlight empty squares
                     color = PLACE_HIGHLIGHT_PLAYER1 if self.current_player == PLAYER_1 else PLACE_HIGHLIGHT_PLAYER2
+                    x = GRID_OFFSET + col * CELL_SIZE
+                    y = GRID_OFFSET + row * CELL_SIZE
+
+                    # Draw the solid highlight first
                     pygame.draw.rect(screen, color,
-                                     (GRID_OFFSET + col * CELL_SIZE,
-                                      GRID_OFFSET + row * CELL_SIZE,
-                                      CELL_SIZE, CELL_SIZE))
+                                     (x, y, CELL_SIZE, CELL_SIZE))
+
+                    # Draw grid lines in a darker color over the highlight
+                    pygame.draw.line(screen, GRID_COLOR,
+                                     (x, y),
+                                     (x, y + CELL_SIZE))
+                    pygame.draw.line(screen, GRID_COLOR,
+                                     (x, y),
+                                     (x + CELL_SIZE, y))
 
         # Draw valid moves for selected piece
         self.draw_valid_moves(screen)
@@ -489,13 +497,28 @@ class Game:
         screen.blit(text, (x + 70, y + 25))  # Position text to right of button, vertically centered
 
     def draw_valid_moves(self, screen):
-        """Draw valid moves for selected piece."""
+        """Draw valid moves for selected piece with both highlight and grid."""
         for row, col in self.valid_moves:
             color = MOVE_HIGHLIGHT_PLAYER1 if self.current_player == PLAYER_1 else MOVE_HIGHLIGHT_PLAYER2
+            x = GRID_OFFSET + col * CELL_SIZE
+            y = GRID_OFFSET + row * CELL_SIZE
+
+            # Draw the solid highlight first
             pygame.draw.rect(screen, color,
-                             (GRID_OFFSET + col * CELL_SIZE,
-                              GRID_OFFSET + row * CELL_SIZE,
-                              CELL_SIZE, CELL_SIZE))
+                             (x, y, CELL_SIZE, CELL_SIZE))
+
+            # Draw grid lines in a darker color over the highlight
+            grid_color = GRID_COLOR  # Using the same color as the main board grid
+
+            # Draw vertical line
+            pygame.draw.line(screen, grid_color,
+                             (x, y),
+                             (x, y + CELL_SIZE))
+
+            # Draw horizontal line
+            pygame.draw.line(screen, grid_color,
+                             (x, y),
+                             (x + CELL_SIZE, y))
 
     def draw_pieces_on_board(self, screen):
         """Draw all the pieces on the board."""
