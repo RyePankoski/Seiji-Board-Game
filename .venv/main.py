@@ -353,7 +353,7 @@ class Game:
         if self.is_king_placement_phase():
             if self.board[row][col] == EMPTY:  # Added center area check
                 king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
-                                      3, self.current_player, False)
+                                      2, self.current_player, False)
                 self.board[row][col] = king_to_place
                 self.kings_placed[self.current_player] = True
                 self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
