@@ -6,7 +6,24 @@ class DrawUtils:
     @staticmethod
     def draw(game, screen):
         """Main draw method that handles all drawing operations"""
-        screen.blit(game.background_2, (0, 0))  # This covers the whole screen
+        screen.blit(game.background_2, (0, 0))
+
+        # Draw board border first (3D effect)
+        border_width = 8
+        # Outer dark border (shadow)
+        pygame.draw.rect(screen, (40, 40, 40),
+                         (GRID_OFFSET - border_width,
+                          GRID_OFFSET - border_width,
+                          BOARD_SIZE * CELL_SIZE + border_width * 2,
+                          BOARD_SIZE * CELL_SIZE + border_width * 2))
+        # Inner light border (highlight)
+        pygame.draw.rect(screen, (200, 200, 200),
+                         (GRID_OFFSET - border_width // 2,
+                          GRID_OFFSET - border_width // 2,
+                          BOARD_SIZE * CELL_SIZE + border_width,
+                          BOARD_SIZE * CELL_SIZE + border_width))
+
+        # Draw main board background
         screen.blit(game.background, (GRID_OFFSET, GRID_OFFSET))
 
         # Draw center X
@@ -41,6 +58,9 @@ class DrawUtils:
         # Draw selected reserve piece highlight
         if game.selected_reserve_piece:
             DrawUtils._draw_selected_reserve_piece(game, screen)
+
+        game.draw_message_log(screen)
+
     @staticmethod
     def _draw_center_x(screen):
         """Draw the X in the center of the board"""
@@ -54,6 +74,7 @@ class DrawUtils:
                          (center_x + CELL_SIZE, center_y),
                          (center_x, center_y + CELL_SIZE),
                          width=2)
+
     @staticmethod
     def _draw_grid(screen):
         """Draw the game board grid"""
@@ -66,6 +87,7 @@ class DrawUtils:
                              (GRID_OFFSET, GRID_OFFSET + i * CELL_SIZE),
                              (GRID_OFFSET + BOARD_SIZE * CELL_SIZE, GRID_OFFSET + i * CELL_SIZE),
                              width=1)
+
     @staticmethod
     def _draw_valid_placements(game, screen):
         """Draw valid placement squares for piece placement phase"""
@@ -76,17 +98,10 @@ class DrawUtils:
                 x = GRID_OFFSET + col * CELL_SIZE
                 y = GRID_OFFSET + row * CELL_SIZE
 
-                # Draw the solid highlight first
-                pygame.draw.rect(screen, color,
-                                 (x, y, CELL_SIZE, CELL_SIZE))
+                pygame.draw.rect(screen, color, (x, y, CELL_SIZE, CELL_SIZE))
+                pygame.draw.line(screen, GRID_COLOR, (x, y), (x, y + CELL_SIZE))
+                pygame.draw.line(screen, GRID_COLOR, (x, y), (x + CELL_SIZE, y))
 
-                # Draw grid lines in a darker color over the highlight
-                pygame.draw.line(screen, GRID_COLOR,
-                                 (x, y),
-                                 (x, y + CELL_SIZE))
-                pygame.draw.line(screen, GRID_COLOR,
-                                 (x, y),
-                                 (x + CELL_SIZE, y))
     @staticmethod
     def _draw_valid_moves(game, screen):
         """Draw valid moves for selected piece"""
@@ -95,55 +110,41 @@ class DrawUtils:
             x = GRID_OFFSET + col * CELL_SIZE
             y = GRID_OFFSET + row * CELL_SIZE
 
-            # Draw the solid highlight first
-            pygame.draw.rect(screen, color,
-                             (x, y, CELL_SIZE, CELL_SIZE))
+            pygame.draw.rect(screen, color, (x, y, CELL_SIZE, CELL_SIZE))
+            pygame.draw.line(screen, GRID_COLOR, (x, y), (x, y + CELL_SIZE))
+            pygame.draw.line(screen, GRID_COLOR, (x, y), (x + CELL_SIZE, y))
 
-            # Draw grid lines in a darker color over the highlight
-            pygame.draw.line(screen, GRID_COLOR,
-                             (x, y),
-                             (x, y + CELL_SIZE))
-            pygame.draw.line(screen, GRID_COLOR,
-                             (x, y),
-                             (x + CELL_SIZE, y))
     @staticmethod
     def _draw_mute_button(game, screen):
         """Draw the mute button with speaker icon and volume message"""
         # Draw button background with gray box
         button_bg_rect = pygame.Rect(game.mute_button_rect)
-        button_bg_rect.inflate_ip(700, 10)  # Make background box bigger than button
-        pygame.draw.rect(screen, (200, 200, 200), button_bg_rect)  # Light gray background
+        button_bg_rect.inflate_ip(700, 10)
+        pygame.draw.rect(screen, (200, 200, 200), button_bg_rect)
 
-        # Original button code
         pygame.draw.rect(screen, (50, 50, 50), game.mute_button_rect, border_radius=10)
 
-        # Draw speaker icon
         x, y = game.mute_button_rect.topleft
-        # Speaker base
         pygame.draw.polygon(screen, WHITE, [
-            (x + 15, y + 25),  # Top-left
-            (x + 25, y + 25),  # Top-right
-            (x + 35, y + 15),  # Top point
-            (x + 35, y + 45),  # Bottom point
-            (x + 25, y + 35),  # Bottom-right
-            (x + 15, y + 35),  # Bottom-left
+            (x + 15, y + 25),
+            (x + 25, y + 25),
+            (x + 35, y + 15),
+            (x + 35, y + 45),
+            (x + 25, y + 35),
+            (x + 15, y + 35),
         ])
 
-        # Sound waves (if not muted)
         if not game.is_muted:
-            # First wave
             pygame.draw.arc(screen, WHITE, (x + 35, y + 20, 10, 20), -0.5, 0.5, 2)
-            # Second wave
             pygame.draw.arc(screen, WHITE, (x + 40, y + 15, 15, 30), -0.5, 0.5, 2)
         else:
-            # Draw X for muted
             pygame.draw.line(screen, RED, (x + 40, y + 15), (x + 55, y + 45), 3)
             pygame.draw.line(screen, RED, (x + 55, y + 15), (x + 40, y + 45), 3)
 
-        # Draw volume control message
         font = pygame.font.Font(None, 30)
         text = font.render("Use arrows keys to adjust volume", True, BLACK)
         screen.blit(text, (x + 70, y + 25))
+
     @staticmethod
     def _draw_selected_piece_highlight(game, screen):
         """Draw highlight for selected piece"""
@@ -152,6 +153,7 @@ class DrawUtils:
                          (GRID_OFFSET + col * CELL_SIZE,
                           GRID_OFFSET + row * CELL_SIZE,
                           CELL_SIZE, CELL_SIZE))
+
     @staticmethod
     def _draw_pieces_on_board(game, screen):
         """Draw all pieces on the board"""
@@ -162,19 +164,16 @@ class DrawUtils:
                     main_color = WHITE if piece.owner == PLAYER_1 else BLACK
                     contrast_color = BLACK if piece.owner == PLAYER_1 else WHITE
 
-                    # Calculate center position
                     center = (GRID_OFFSET + col * CELL_SIZE + CELL_SIZE // 2,
                               GRID_OFFSET + row * CELL_SIZE + CELL_SIZE // 2)
 
-                    # Draw promotion indicator if piece is promoted
                     if piece.promoted:
                         pygame.draw.circle(screen, RED, center, CELL_SIZE // 2 - 2)
 
-                    # Draw the main piece circle
                     pygame.draw.circle(screen, main_color, center, CELL_SIZE // 2 - 5)
 
-                    # Draw special indicators for different piece types
                     DrawUtils._draw_piece_type_indicators(screen, piece, center)
+
     @staticmethod
     def _draw_piece_type_indicators(screen, piece, center):
         """Draw special indicators for different piece types"""
@@ -190,7 +189,6 @@ class DrawUtils:
         elif piece.name == "Advisor":
             pygame.draw.circle(screen, contrast_color, center, CELL_SIZE // 4)
         elif piece.name == "Palace":
-            # Draw palace area outline and piece
             area_size = PALACE_AREA
             top_left_x = (center[0] // CELL_SIZE) * CELL_SIZE - (area_size // 2) * CELL_SIZE
             top_left_y = (center[1] // CELL_SIZE) * CELL_SIZE - (area_size // 2) * CELL_SIZE
@@ -201,17 +199,51 @@ class DrawUtils:
 
             palace_top_left = (center[0] - CELL_SIZE // 4, center[1] - CELL_SIZE // 4)
             pygame.draw.rect(screen, PURPLE, (palace_top_left[0], palace_top_left[1], CELL_SIZE // 2, CELL_SIZE // 2))
+
     @staticmethod
     def _draw_piece_reserve(game, screen):
-        """Draw the piece reserve area on the right side"""
+        """Draw the piece reserve area on the right side with 3D borders"""
         reserve_start_x = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + CELL_SIZE
 
-        # Draw White's pieces from reserve array
-        DrawUtils._draw_reserve_pieces(game, screen, game.player1_reserve, reserve_start_x, 60, WHITE, BLACK)
+        piece_spacing = CELL_SIZE * 0.8
+        max_pieces_per_row = 4
+        padding = piece_spacing * 0.5
+        max_possible_rows = 5
 
-        # Draw Black's pieces from reserve array
-        DrawUtils._draw_reserve_pieces(game, screen, game.player2_reserve, reserve_start_x, WINDOW_HEIGHT // 2 - 60,
+        table_size = max(
+            (max_pieces_per_row * piece_spacing) + (padding * 3),
+            (max_possible_rows * piece_spacing) + (padding * 4)
+        )
+
+        # Draw tables with 3D borders
+        for y_offset in [60, WINDOW_HEIGHT // 2 - 60]:
+            # Draw outer shadow border
+            border_width = 8
+            pygame.draw.rect(screen, (40, 40, 40),
+                             (reserve_start_x - border_width,
+                              y_offset - border_width,
+                              table_size + border_width * 2,
+                              table_size + border_width * 2))
+
+            # Draw inner highlight border
+            pygame.draw.rect(screen, (200, 200, 200),
+                             (reserve_start_x - border_width // 2,
+                              y_offset - border_width // 2,
+                              table_size + border_width,
+                              table_size + border_width))
+
+            # Draw table background
+            table_texture = pygame.transform.scale(game.table_texture,
+                                                   (int(table_size), int(table_size)))
+            screen.blit(table_texture, (reserve_start_x, y_offset))
+
+        # Draw the pieces
+        DrawUtils._draw_reserve_pieces(game, screen, game.player1_reserve,
+                                       reserve_start_x, 60, WHITE, BLACK)
+        DrawUtils._draw_reserve_pieces(game, screen, game.player2_reserve,
+                                       reserve_start_x, WINDOW_HEIGHT // 2 - 60,
                                        BLACK, WHITE)
+
     @staticmethod
     def _draw_reserve_pieces(game, screen, reserve, reserve_start_x, y_offset, piece_color, contrast_color):
         """Draw pieces in the reserve area"""
@@ -219,24 +251,6 @@ class DrawUtils:
         max_pieces_per_row = 4
         padding = piece_spacing * 0.5
 
-        # Calculate size based on maximum possible content
-        max_possible_rows = (
-                2 +  # Advisors row (max 2 pieces = 1 row)
-                2 +  # Officials row (max 7 pieces = 2 rows)
-                1  # Palace row (max 1 piece = 1 row)
-        )
-
-        # Make table big enough to fit maximum possible pieces plus padding
-        table_size = max(
-            (max_pieces_per_row * piece_spacing) + (padding * 3),  # width needed
-            (max_possible_rows * piece_spacing) + (padding * 4)  # height needed for maximum case
-        )
-
-        # Scale texture to fixed square size
-        table_texture = pygame.transform.scale(game.table_texture, (int(table_size), int(table_size)))
-        screen.blit(table_texture, (reserve_start_x, y_offset))
-
-        # Draw pieces starting from the top of the table
         current_y = y_offset + padding
         for section in reserve:
             num_pieces = len(section)
@@ -249,12 +263,10 @@ class DrawUtils:
                 x = reserve_start_x + (col * piece_spacing) + padding
                 y = current_y + (row * piece_spacing)
 
-                # Draw the piece
                 pygame.draw.circle(screen, piece_color,
                                    (int(x + piece_spacing / 2), int(y + piece_spacing / 2)),
                                    int(piece_spacing / 2 - 5))
 
-                # Draw piece type indicators
                 if piece_type == "Advisor":
                     pygame.draw.circle(screen, contrast_color,
                                        (int(x + piece_spacing / 2), int(y + piece_spacing / 2)),
@@ -265,8 +277,8 @@ class DrawUtils:
                                       int(y + piece_spacing / 2 - piece_spacing / 4),
                                       piece_spacing / 2, piece_spacing / 2))
 
-            # Update current_y for next section
             current_y += rows_needed * piece_spacing + padding
+
     @staticmethod
     def _draw_game_info(game, screen):
         """Draw game information including current player and game over message"""
@@ -276,7 +288,6 @@ class DrawUtils:
         text3 = font.render(f"Player to move: {display_name}", True, WHITE)
         screen.blit(text3, (10, 10))
 
-        # Draw game over message if applicable
         if game.game_over:
             winner_text = "WHITE WINS" if game.winner == PLAYER_1 else "BLACK WINS"
 
@@ -310,6 +321,7 @@ class DrawUtils:
 
             # Draw the main text in the center of the screen
             screen.blit(text5, text_rect)
+
     @staticmethod
     def _draw_selected_reserve_piece(game, screen):
         """Draw highlight for selected reserve piece"""
