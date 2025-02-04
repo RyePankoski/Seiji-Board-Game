@@ -61,6 +61,26 @@ class DrawUtils:
 
         game.draw_message_log(screen)
 
+        # Draw row and column numbers
+        font = pygame.font.SysFont(None, 24)
+        text_color = (255, 255, 255)  # Black for visibility
+
+        # Draw numbers along the left side (rows)
+        for row in range(1, BOARD_SIZE + 1):
+            text = font.render(str(row), True, text_color)
+            text_rect = text.get_rect()
+            text_rect.right = GRID_OFFSET - 10  # 10 pixels padding from the grid
+            text_rect.centery = GRID_OFFSET + (BOARD_SIZE - row + 0.5) * CELL_SIZE  # Adjust for bottom-up numbering
+            screen.blit(text, text_rect)
+
+        # Draw numbers along the bottom (columns)
+        for col in range(1, BOARD_SIZE + 1):
+            text = font.render(str(col), True, text_color)
+            text_rect = text.get_rect()
+            text_rect.centerx = GRID_OFFSET + (col - 0.5) * CELL_SIZE
+            text_rect.top = GRID_OFFSET + BOARD_SIZE * CELL_SIZE + 10  # Adjust to position above the grid
+            screen.blit(text, text_rect)
+
     @staticmethod
     def _draw_center_x(screen):
         """Draw the X in the center of the board"""
@@ -119,10 +139,12 @@ class DrawUtils:
         """Draw the mute button with speaker icon and volume message"""
         # Draw button background with gray box
         button_bg_rect = pygame.Rect(game.mute_button_rect)
-        button_bg_rect.inflate_ip(700, 10)
-        pygame.draw.rect(screen, (200, 200, 200), button_bg_rect)
 
-        pygame.draw.rect(screen, (50, 50, 50), game.mute_button_rect, border_radius=10)
+        button_bg_rect.inflate_ip(700, 10)
+
+        pygame.draw.rect(screen, (200, 200,200, 100), button_bg_rect)
+        pygame.draw.rect(screen, (180, 20, 20), button_bg_rect, width=2)
+        pygame.draw.rect(screen, (30, 30, 30), game.mute_button_rect, border_radius=10)
 
         x, y = game.mute_button_rect.topleft
         pygame.draw.polygon(screen, WHITE, [
@@ -143,7 +165,7 @@ class DrawUtils:
 
         font = pygame.font.Font(None, 30)
         text = font.render("Use arrows keys to adjust volume", True, BLACK)
-        screen.blit(text, (x + 70, y + 25))
+        screen.blit(text, (x + 70, y + 20))
 
     @staticmethod
     def _draw_selected_piece_highlight(game, screen):

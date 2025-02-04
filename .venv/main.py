@@ -120,7 +120,6 @@ class MenuScreen:
         screen.blit(text_surface, text_rect)
 
 
-
 def fade_transition(screen):
     fade_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
     fade_surface.fill((0, 0, 0))  # Black fade
@@ -131,9 +130,11 @@ def fade_transition(screen):
         pygame.display.flip()
         pygame.time.delay(10)  # Small delay to control fade speed
 
+
 class GameState:
     MENU = "menu"
     PLAYING = "playing"
+
 
 class Piece:
     def __init__(self, name, directions, move_distance, owner, promoted=False):
@@ -143,6 +144,7 @@ class Piece:
         self.owner = owner
         self.promoted = promoted
         self.promote_sound_played = False
+
 
 class Game:
     def __init__(self):
@@ -184,9 +186,9 @@ class Game:
         self.log_font = pygame.font.Font(None, 24)  # Font for the log
         self.log_rect = pygame.Rect(
             WINDOW_WIDTH - 300,  # X position (300 pixels from right)
-            WINDOW_HEIGHT - 126,  # Y position (adjusted up since box is smaller)
+            WINDOW_HEIGHT - 160,  # Y position (adjusted up since box is smaller)
             280,  # Width of log box
-            126  # Height reduced to 70% of original (180 * 0.7 = 126)
+            140  # Height reduced to 70% of original (180 * 0.7 = 126)
         )
 
         self.player1_reserve = [
@@ -389,7 +391,7 @@ class Game:
 
         elif name == "Advisor":
             if "Monarch" in adjacent_pieces:
-                promote(promoting_piece, 3, new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0),
+                promote(promoting_piece, 2, new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0),
                                                             (0, -1)])
         elif name == "Official":
             if "Monarch" in adjacent_pieces:
@@ -454,6 +456,8 @@ class Game:
         enemy_player = PLAYER_2 if current_player == PLAYER_1 else PLAYER_1
         reserve_to_edit = self.player1_reserve if current_player == PLAYER_1 else self.player2_reserve
 
+        just_captured = False
+
         # Check if the target square contains an enemy piece
         if target_square != EMPTY and target_square.owner == enemy_player:
             captured_piece_name = target_square.name
@@ -463,11 +467,12 @@ class Game:
             if captured_piece_name != "Palace":
                 piece_reserve.append(captured_piece_name)
             self.pieces_in_hand[current_player] += 1
-            self.add_to_log(f"Captured {captured_piece_name}! Player {current_player} now has {self.pieces_in_hand[current_player]} pieces")
+            self.add_to_log(f"Player {current_player} captured {captured_piece_name} at {to_row},{to_col} ")
+            just_captured = True
 
+        if just_captured != True:
+            self.add_to_log(f"Player {moving_piece.owner} moved {moving_piece.name} to: {to_col + 1},{13 - (to_row)}")
 
-        # Move the piece
-        self.add_to_log(f"Player {moving_piece.owner} moved {moving_piece.name} to: {to_row},{to_col}")
         self.board[to_row][to_col] = moving_piece
         self.board[from_row][from_col] = EMPTY
         self.did_someone_win()
@@ -564,7 +569,7 @@ class Game:
                 self.kings_placed[self.current_player] = True
                 self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
                 self.place_sound.play()
-                self.add_to_log(f"Player {king_to_place.owner} placed their Monarch")
+                self.add_to_log(f"Player {king_to_place.owner} placed Monarch at {col + 1},{13 - row}")
                 self.finish_move()
             return
 
@@ -632,7 +637,8 @@ class Game:
                     if piece_from_reserve['piece_type'] == "Palace":
                         reserve_to_edit[2].pop()
 
-                    self.add_to_log(f"Player {self.board[row][col].owner} placed {self.board[row][col].name} at: {row},{col}")
+                    self.add_to_log(
+                        f"Player {self.board[row][col].owner} placed {self.board[row][col].name} at: {col + 1},{13 - row}")
 
                     # Play place sound when a piece is placed
                     self.place_sound.play()
@@ -640,7 +646,6 @@ class Game:
 
                 else:
                     self.deselect()
-
 
     def get_game_state(self):
         # Create a serializable version of the board
@@ -787,7 +792,6 @@ def main():
                         except pygame.error as e:
                             print(f"Could not load or play the game music file: {e}")
 
-
                         game.multiplayer = False
                         current_state = GameState.PLAYING
                     elif action == "multiplayer":
@@ -851,6 +855,7 @@ def main():
 
         pygame.display.flip()
         clock.tick(15)
+
 
 if __name__ == "__main__":
     main()
