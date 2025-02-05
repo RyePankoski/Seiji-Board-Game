@@ -3,7 +3,6 @@ import random
 import math
 from constants import *
 
-
 class StarPoint:
     def __init__(self, center_x, center_y):
         # Initialize near center with random offset
@@ -39,7 +38,6 @@ class StarPoint:
         return (self.position[0] < 0 or self.position[0] > width or
                 self.position[1] < 0 or self.position[1] > height)
 
-
 class MenuStarfield:
     def __init__(self, width, height):
         self.width = width
@@ -68,8 +66,6 @@ class MenuStarfield:
             pygame.draw.circle(screen, (255, 255, 255),
                                (int(star.position[0]), int(star.position[1])),
                                star.size)  # Use dynamic size
-
-
 class DrawUtils:
     @staticmethod
     def draw(game, screen):

@@ -7,82 +7,13 @@ import socket
 import json
 import threading
 import queue
-from network_manager import NetworkManager
 from pygame import mixer
+from network_manager import NetworkManager
+from UI import MenuScreen
+from piece import Piece
 
 # Initialize Pygame
 pygame.init()
-
-
-class MenuScreen:
-    def __init__(self):
-        self.show_ip_dialog = False
-
-        try:
-            self.font = pygame.font.Font('Fonts/font.otf', 60)
-            self.title_font = pygame.font.Font('Fonts/font.otf', 90)
-        except pygame.error:
-            print("Custom font not found, using default")
-            self.font = pygame.font.Font(None, 42)
-
-        # Load and scale the texture
-        try:
-            self.texture = pygame.image.load('Textures/tables.png').convert_alpha()
-        except pygame.error:
-            print("Texture not found")
-            self.texture = None
-
-        button_width = 200
-        button_height = 50
-        button_spacing = 75
-        border_width = 3
-
-        # Calculate positions
-        total_height = (3 * button_height) + (2 * button_spacing)
-        start_y = (WINDOW_HEIGHT // 2) - (total_height // 2)
-
-        # Store both outer (with border) and inner rectangles
-        self.button_borders = []
-        self.buttons = []
-
-        # Create buttons with their borders
-        button_positions = [
-            ("Alone", start_y),
-            ("Amidst", start_y + button_height + button_spacing),
-            ("Abandon", start_y + 2 * (button_height + button_spacing))
-        ]
-
-        for text, y_pos in button_positions:
-            # Outer rectangle (border)
-            border_rect = pygame.Rect(
-                WINDOW_WIDTH // 2 - (button_width + border_width * 2) // 2,
-                y_pos - border_width,
-                button_width + border_width * 2,
-                button_height + border_width * 2
-            )
-
-            # Inner rectangle (button)
-            button_rect = pygame.Rect(
-                WINDOW_WIDTH // 2 - button_width // 2,
-                y_pos,
-                button_width,
-                button_height
-            )
-
-            self.button_borders.append(border_rect)
-            self.buttons.append((button_rect, text))
-
-    def handle_click(self, mouse_x, mouse_y):
-        """Handle menu button clicks"""
-        for button_rect, text in self.buttons:
-            if button_rect.collidepoint(mouse_x, mouse_y):
-                return text  # Return the exact text without modification
-        return None
-
-    def draw(self, screen):
-        """Draw the menu using DrawUtils"""
-        DrawUtils.draw_menu(screen, self)
-
 
 def fade_transition(screen):
     fade_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -101,13 +32,7 @@ class GameState:
     PLACEMENT = "placement"
     MOVEMENT = "movement"
     GAME_OVER = "game_over"
-class Piece:
-    def __init__(self, name, directions, move_distance, owner, promoted=False):
-        self.name = name
-        self.directions = directions
-        self.move_distance = move_distance
-        self.owner = owner
-        self.promoted = promoted
+
 
 class Game:
     def __init__(self):
@@ -170,80 +95,20 @@ class Game:
         ]
 
     def network_finish_move(self):
+        """Called at the end of each move to update network state"""
         if self.multiplayer:
-            self.send_game_state()
-
-    def get_game_state(self):
-        # Create a serializable version of the board
-        serializable_board = []
-        for row in self.board:
-            board_row = []
-            for piece in row:
-                if piece == 0:
-                    board_row.append(0)
-                else:
-                    # Convert Piece object to a dictionary with all its properties
-                    board_row.append({
-                        "name": piece.name,
-                        "directions": piece.directions,
-                        "move_distance": piece.move_distance,
-                        "owner": piece.owner,
-                        "promoted": piece.promoted,
-                    })
-            serializable_board.append(board_row)
-
-        return {
-            "board": serializable_board,
-            "current_player": self.current_player,
-            "player_1_reserve": self.player1_reserve,
-            "player_2_reserve": self.player2_reserve,
-            "most_recent_message": self.most_recent_message
-        }
-
-    def update_game_state(self, new_state):
-        # Convert the serialized board back to Piece objects
-        board = []
-        for row in new_state["board"]:
-            board_row = []
-            for cell in row:
-                if cell == 0:
-                    board_row.append(0)
-                else:
-                    # Reconstruct the Piece object from the dictionary
-                    piece = Piece(
-                        name=cell["name"],
-                        directions=cell["directions"],
-                        move_distance=cell["move_distance"],
-                        owner=cell["owner"],
-                        promoted=cell["promoted"]
-                    )
-                    board_row.append(piece)
-            board.append(board_row)
-
-        self.board = board
-        self.current_player = new_state["current_player"]
-        self.player1_reserve = new_state["player_1_reserve"]
-        self.player2_reserve = new_state["player_2_reserve"]
-        self.add_to_log(new_state["most_recent_message"])
-
-        self.did_someone_win()
-
-    def send_game_state(self):
-        """Sends the current game state in multiplayer mode"""
-        if self.multiplayer:
-            current_state = self.get_game_state()
-            self.network_manager.send_game_state(current_state)
-
-    def connect_to_server(self, server_ip="localhost"):
-        """Establishes connection to the game server"""
-        if self.network_manager.connect_to_server(server_ip):
-            self.multiplayer = True
-            return True
-        return False
+            self.network_manager.send_game_state(
+                self.board,
+                self.current_player,
+                self.player1_reserve,
+                self.player2_reserve,
+                self.most_recent_message
+            )
 
     def process_network_updates(self):
+        """Process any pending network updates"""
         if self.multiplayer:
-            self.network_manager.process_network_updates(self.update_game_state)
+            self.network_manager.process_network_updates(self)
 
     def add_to_log(self, message):
         """Add a new message to the game log"""
@@ -608,7 +473,6 @@ class Game:
         finally:
             self.end_of_move()
 
-
 # For handling audio
 def main():
     pygame.init()
@@ -676,10 +540,10 @@ def main():
                             except pygame.error as e:
                                 print(f"Could not load or play the game music file: {e}")
 
-                            game.multiplayer = True
-                            game.connect_to_server(menu.ip_input)
-                            menu.show_ip_dialog = False
-                            current_state = GameState.PLAYING
+                            if game.network_manager.connect_to_server(menu.ip_input):
+                                game.multiplayer = True
+                                menu.show_ip_dialog = False
+                                current_state = GameState.PLAYING
 
                         elif event.key == pygame.K_ESCAPE:
                             # Cancel IP input
@@ -732,7 +596,7 @@ def main():
 
             game.process_network_updates()
             DrawUtils.draw(game, screen)
-            DrawUtils.draw_message_log(game,screen)
+            DrawUtils.draw_message_log(game, screen)
 
         # Draw current state
         if current_state == GameState.MENU:
