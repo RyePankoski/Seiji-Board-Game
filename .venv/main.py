@@ -7,6 +7,7 @@ import socket
 import json
 import threading
 import queue
+from network_manager import NetworkManager
 
 # Initialize Pygame
 pygame.init()
@@ -15,15 +16,15 @@ pygame.init()
 class MenuScreen:
     def __init__(self):
         try:
-            self.font = pygame.font.Font('font.otf', 42)
-            self.title_font = pygame.font.Font('font.otf', 72)
+            self.font = pygame.font.Font('Fonts/font.otf', 42)
+            self.title_font = pygame.font.Font('Fonts/font.otf', 72)
         except pygame.error:
             print("Custom font not found, using default")
             self.font = pygame.font.Font(None, 42)
 
         # Load and scale the texture
         try:
-            self.texture = pygame.image.load('tables.png').convert_alpha()
+            self.texture = pygame.image.load('Textures/tables.png').convert_alpha()
         except pygame.error:
             print("Texture not found")
             self.texture = None
@@ -31,7 +32,7 @@ class MenuScreen:
         button_width = 200
         button_height = 50
         button_spacing = 75
-        border_width = 3  # Width of the border around buttons
+        border_width = 3
 
         # Calculate positions
         total_height = (3 * button_height) + (2 * button_spacing)
@@ -69,42 +70,8 @@ class MenuScreen:
             self.buttons.append((button_rect, text))
 
     def draw(self, screen):
-        # Draw background
-        screen.fill((50, 50, 50))
-
-        # Draw each button with its texture and border
-        for border_rect, (button_rect, text) in zip(self.button_borders, self.buttons):
-            # Draw border
-            pygame.draw.rect(screen, (200, 200, 200), border_rect)
-
-            # Draw button background
-            pygame.draw.rect(screen, (100, 100, 100), button_rect)
-
-            # Draw texture if available
-            if self.texture:
-                # Create a subsurface of the texture sized to the button
-                texture_rect = self.texture.get_rect()
-                scale_factor = max(button_rect.width / texture_rect.width,
-                                   button_rect.height / texture_rect.height)
-
-                scaled_width = int(texture_rect.width * scale_factor)
-                scaled_height = int(texture_rect.height * scale_factor)
-
-                scaled_texture = pygame.transform.scale(self.texture,
-                                                        (scaled_width, scaled_height))
-
-                # Center the texture on the button
-                texture_x = button_rect.x + (button_rect.width - scaled_width) // 2
-                texture_y = button_rect.y + (button_rect.height - scaled_height) // 2
-
-                # Create a mask to keep the texture within the button bounds
-                button_surface = pygame.Surface((button_rect.width, button_rect.height))
-                button_surface.fill((100, 100, 100))
-                screen.blit(scaled_texture, (texture_x, texture_y),
-                            special_flags=pygame.BLEND_RGBA_MULT)
-
-            # Draw text
-            self.draw_text(screen, text, button_rect)
+        """Draw the menu using DrawUtils"""
+        DrawUtils.draw_menu(screen, self)
 
     def handle_click(self, mouse_x, mouse_y):
         for button_rect, text in self.buttons:
@@ -113,11 +80,6 @@ class MenuScreen:
                     return "singleplayer"
                 return text.lower()
         return None
-
-    def draw_text(self, screen, text, button):
-        text_surface = self.font.render(text, True, (255, 255, 255))
-        text_rect = text_surface.get_rect(center=button.center)
-        screen.blit(text_surface, text_rect)
 
 
 def fade_transition(screen):
@@ -158,28 +120,31 @@ class Game:
         self.winner = None  # Add this
         self.reserve_selected = False
         self.selected_reserve_piece = None
-        self.multiplayer = False
         self.monarch_placement_phase = True
+
+        self.network_manager = NetworkManager()
+        self.multiplayer = False
 
         self.update_queue = queue.Queue()
         self.lock = threading.Lock()
 
-        self.place_sound = pygame.mixer.Sound("place_sound.mp3")  # Replace with actual file path
-        self.slide_sound = pygame.mixer.Sound("slide_sound.mp3")
-        self.pick_up = pygame.mixer.Sound("pick_up.mp3")
-        self.capture = pygame.mixer.Sound("capture.mp3")
-        self.promote = pygame.mixer.Sound("promote.mp3")
-        self.endgame = pygame.mixer.Sound("endgame.mp3")
-        self.advisor = pygame.mixer.Sound("advisor.mp3")
+        self.place_sound = pygame.mixer.Sound("Sounds/place_sound.mp3")  # Replace with actual file path
+        self.slide_sound = pygame.mixer.Sound("Sounds/slide_sound.mp3")
+        self.pick_up = pygame.mixer.Sound("Sounds/pick_up.mp3")
+        self.capture = pygame.mixer.Sound("Sounds/capture.mp3")
+        self.promote_sound = pygame.mixer.Sound("Sounds/promote.mp3")
+        self.endgame = pygame.mixer.Sound("Sounds/endgame.mp3")
+        self.advisor = pygame.mixer.Sound("Sounds/advisor.mp3")
+        self.de_select = pygame.mixer.Sound("Sounds/de-select.mp3")
 
         self.is_muted = False
         self.mute_button_rect = pygame.Rect(10, WINDOW_HEIGHT - 70, 60, 60)
 
-        self.background = pygame.image.load("background.png")
+        self.background = pygame.image.load("Textures/background.png")
         self.background = pygame.transform.scale(self.background, (BOARD_SIZE * CELL_SIZE, BOARD_SIZE * CELL_SIZE))
-        self.background_2 = pygame.image.load("background_2.png")
+        self.background_2 = pygame.image.load("Textures/background_2.png")
         self.background_2 = pygame.transform.scale(self.background_2, (WINDOW_WIDTH, WINDOW_HEIGHT))
-        self.table_texture = pygame.image.load("tables.png").convert_alpha()
+        self.table_texture = pygame.image.load("Textures/tables.png").convert_alpha()
 
         self.message_log = []
         self.max_messages = 10  # Maximum number of messages to show
@@ -359,6 +324,14 @@ class Game:
         if piece_to_demote.name in demotion_settings:
             piece_to_demote.directions, piece_to_demote.move_distance = demotion_settings[piece_to_demote.name]
 
+    def promote(self, piece, move_distance=0, new_directions=None):
+        if piece.promoted == False:
+            self.promote_sound.play()
+            piece.promoted = True
+            piece.move_distance = move_distance  # Set move_distance directly
+            if new_directions:
+                piece.directions = new_directions  # Set directions directly
+
     def handle_promotion_status(self, row, col):
         promoting_piece = self.board[row][col]
         adjacent_pieces = self.has_friendly_adjacent_pieces(row, col)
@@ -375,30 +348,23 @@ class Game:
             self.advisor_next_advisor = False
             return
 
-        def promote(piece, move_distance=0, new_directions=None):
-            if piece.promoted == False:
-                self.promote.play()
-                piece.promoted = True
-                piece.move_distance = move_distance  # Set move_distance directly
-                if new_directions:
-                    piece.directions = new_directions  # Set directions directly
-
         name = promoting_piece.name
 
         if name == "Monarch":
             if adjacent_pieces:
-                promote(promoting_piece, move_distance=2)
+                self.promote(promoting_piece, move_distance=2)
 
         elif name == "Advisor":
             if "Monarch" in adjacent_pieces:
-                promote(promoting_piece, 2, new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0),
-                                                            (0, -1)])
+                self.promote(promoting_piece, 2,
+                             new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0),
+                                             (0, -1)])
         elif name == "Official":
             if "Monarch" in adjacent_pieces:
-                promote(promoting_piece, 1,
-                        new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0), (0, -1)])
+                self.promote(promoting_piece, 1,
+                             new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0), (0, -1)])
             elif "Advisor" in adjacent_pieces:
-                promote(promoting_piece, move_distance=2)
+                self.promote(promoting_piece, move_distance=2)
 
     def check_board_promotions(self):
         for row in range(BOARD_SIZE):
@@ -536,44 +502,76 @@ class Game:
         self.selected_reserve_piece = None
         return False
 
-    def finish_move(self):
-        if self.multiplayer == True:
-            self.send_game_state()
-
     def deselect(self):
-        """Clear all current selections in the game state"""
-        # Clear piece selection
         self.selected_piece = None
-
-        # Clear reserve piece selection
         self.selected_reserve_piece = None
         self.reserve_selected = False
-
-        # Clear valid moves
         self.valid_moves = []
 
-        # Optional: Clear any temporary game states related to selection
-        # self.temp_state = None  # Uncomment if you have temporary states to clear
+    def place_new_piece(self, row, col):
+
+        if self.current_player == PLAYER_1:
+            reserve_to_edit = self.player1_reserve
+        else:
+            reserve_to_edit = self.player2_reserve
+
+        piece_from_reserve = self.selected_reserve_piece
+
+        if piece_from_reserve['piece_type'] == "Official":
+            piece_to_place = Piece("Official", [(1, 0), (0, 1), (-1, 0), (0, -1)], 1, self.current_player,
+                                   False)
+        elif piece_from_reserve['piece_type'] == "Advisor":
+            piece_to_place = Piece("Advisor", [(1, 1), (1, -1), (-1, -1), (-1, 1)], 3, self.current_player,
+                                   False)
+        elif piece_from_reserve['piece_type'] == "Palace":
+            piece_to_place = Piece("Palace", [], 0, self.current_player, False)
+
+        valid_placements = self.get_valid_placement_squares()
+
+        if (row, col) in valid_placements:
+            self.reserve_selected = False
+            self.board[row][col] = piece_to_place
+            self.check_board_promotions()
+
+            self.pieces_in_hand[self.current_player] -= 1
+            self.selected_piece = None
+            self.valid_moves = []
+            self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
+
+            # Update reserves based on the piece placed
+            if piece_from_reserve['piece_type'] == "Advisor":
+                reserve_to_edit[0].pop()  # Removes and returns the last advisor
+            if piece_from_reserve['piece_type'] == "Official":
+                reserve_to_edit[1].pop()  # Removes and returns the last official
+            if piece_from_reserve['piece_type'] == "Palace":
+                reserve_to_edit[2].pop()
+
+            self.add_to_log(
+                f"Player {self.board[row][col].owner} placed {self.board[row][col].name} at: {col + 1},{13 - row}")
+
+            self.place_sound.play()
+
+    def place_monarch(self, row, col):
+        king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
+                              1, self.current_player, False)
+        self.board[row][col] = king_to_place
+        self.kings_placed[self.current_player] = True
+        self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
+        self.place_sound.play()
+        self.add_to_log(f"Player {king_to_place.owner} placed Monarch at {col + 1},{13 - row}")
 
     def handle_click(self, row, col):
-
         if self.game_over:
             return
 
         # King placement phase
         if self.is_king_placement_phase():
             if self.board[row][col] == EMPTY:  # Added center area check
-                king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
-                                      1, self.current_player, False)
-                self.board[row][col] = king_to_place
-                self.kings_placed[self.current_player] = True
-                self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
-                self.place_sound.play()
-                self.add_to_log(f"Player {king_to_place.owner} placed Monarch at {col + 1},{13 - row}")
+                self.place_monarch(row, col)
                 self.finish_move()
             return
 
-        # First priority: If we have a piece selected, handle movement
+        # First priority: If we have a piece selected, handle movement or deselection
         if self.selected_piece:
             if (row, col) in self.valid_moves:
                 self.move_piece(self.selected_piece, (row, col))
@@ -584,13 +582,11 @@ class Game:
                 if not self.game_over:  # Only switch players if game isn't over
                     self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
 
-                # Play slide sound when a piece is moved
                 self.slide_sound.play()
                 self.finish_move()
-
-            elif (row, col) == self.selected_piece:
-                self.selected_piece = None
-                self.valid_moves = []
+            else:  # Clicking anywhere invalid with a piece selected should deselect
+                self.deselect()
+                return
 
         # Second priority: If clicking own piece (regular or king), select it
         elif self.board[row][col] != EMPTY and self.board[row][col].owner == self.current_player:
@@ -598,54 +594,18 @@ class Game:
             self.valid_moves = self.get_valid_moves(row, col)
             self.advisor.play()
 
-        # Last priority: If clicking empty space and have pieces, try to place a new piece
-        elif self.reserve_selected == True:
-            if self.selected_reserve_piece:  # Ensure selected_reserve_piece is not None
-                if self.current_player == PLAYER_1:
-                    reserve_to_edit = self.player1_reserve
-                else:
-                    reserve_to_edit = self.player2_reserve
+        # Third priority: If reserve is selected, try to place a new piece or deselect
+        elif self.reserve_selected:
+            success = self.place_new_piece(row, col)
+            self.finish_move()
+            if not success:
+                self.deselect()
+                self.de_select.play()
 
-                piece_from_reserve = self.selected_reserve_piece
-
-                if piece_from_reserve['piece_type'] == "Official":
-                    piece_to_place = Piece("Official", [(1, 0), (0, 1), (-1, 0), (0, -1)], 1, self.current_player,
-                                           False)
-                elif piece_from_reserve['piece_type'] == "Advisor":
-                    piece_to_place = Piece("Advisor", [(1, 1), (1, -1), (-1, -1), (-1, 1)], 3, self.current_player,
-                                           False)
-                elif piece_from_reserve['piece_type'] == "Palace":
-                    piece_to_place = Piece("Palace", [], 0, self.current_player, False)
-
-                valid_placements = self.get_valid_placement_squares()
-
-                if (row, col) in valid_placements:
-                    self.reserve_selected = False
-                    self.board[row][col] = piece_to_place
-                    self.check_board_promotions()
-
-                    self.pieces_in_hand[self.current_player] -= 1
-                    self.selected_piece = None
-                    self.valid_moves = []
-                    self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
-
-                    # Update reserves based on the piece placed
-                    if piece_from_reserve['piece_type'] == "Advisor":
-                        reserve_to_edit[0].pop()  # Removes and returns the last advisor
-                    if piece_from_reserve['piece_type'] == "Official":
-                        reserve_to_edit[1].pop()  # Removes and returns the last official
-                    if piece_from_reserve['piece_type'] == "Palace":
-                        reserve_to_edit[2].pop()
-
-                    self.add_to_log(
-                        f"Player {self.board[row][col].owner} placed {self.board[row][col].name} at: {col + 1},{13 - row}")
-
-                    # Play place sound when a piece is placed
-                    self.place_sound.play()
-                    self.finish_move()
-
-                else:
-                    self.deselect()
+    def finish_move(self):
+        """Called after a move is completed to handle multiplayer synchronization"""
+        if self.multiplayer:
+            self.send_game_state()
 
     def get_game_state(self):
         # Create a serializable version of the board
@@ -702,47 +662,23 @@ class Game:
 
         self.did_someone_win()
 
-    def send_game_state(self):  # Remove the connection parameter
-        current_state = self.get_game_state()
-        try:
-            state_string = json.dumps(current_state)
-            print("Client says: 'Sending data'")
-            self.socket.send(state_string.encode())  # Use self.socket instead of connection
-        except Exception as e:
-            print(f"Error sending game state: {e}")
+    def send_game_state(self):
+        """Sends the current game state in multiplayer mode"""
+        if self.multiplayer:
+            current_state = self.get_game_state()
+            self.network_manager.send_game_state(current_state)
 
     def connect_to_server(self, server_ip="localhost"):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            self.socket.connect((server_ip, 5555))
-            print("Connected to server!")
-            # Start network thread to receive updates
-            threading.Thread(target=self.network_thread, daemon=True).start()
-        except Exception as e:
-            print(f"Couldn't connect to server: {e}")
-
-    def network_thread(self):
-        while True:
-            try:
-                data = self.socket.recv(4096)  # Increased buffer size
-                if data:
-                    new_state = json.loads(data.decode())
-                    # Instead of updating directly, put the state in the queue
-                    print("Client says: 'Pushing recieved data into queue'")
-                    self.update_queue.put(new_state)
-            except Exception as e:
-                print(f"Network error: {e}")
-                break
+        """Establishes connection to the game server"""
+        if self.network_manager.connect_to_server(server_ip):
+            self.multiplayer = True
+            return True
+        return False
 
     def process_network_updates(self):
-        """Process any pending network updates - call this in the main game loop"""
-        try:
-            while not self.update_queue.empty():
-                new_state = self.update_queue.get_nowait()
-                with self.lock:
-                    self.update_game_state(new_state)
-        except queue.Empty:
-            pass  # No updates to process
+        """Processes any pending network updates"""
+        if self.multiplayer:
+            self.network_manager.process_network_updates(self.update_game_state)
 
 
 import pygame
@@ -759,7 +695,7 @@ def main():
 
     # Load and start playing the ambient track
     try:
-        mixer.music.load('menu_theme.mp3')  # Create a separate menu music file
+        mixer.music.load('Sounds/menu_theme.mp3')  # Create a separate menu music file
         mixer.music.set_volume(0.5)
         mixer.music.play(-1)
     except pygame.error as e:
@@ -787,7 +723,7 @@ def main():
 
                         try:
                             mixer.music.fadeout(1000)  # Fade out over 1 second
-                            mixer.music.load('ambient_track.mp3')
+                            mixer.music.load('Sounds/ambient_track.mp3')
                             mixer.music.play(-1)
                         except pygame.error as e:
                             print(f"Could not load or play the game music file: {e}")
@@ -799,13 +735,14 @@ def main():
 
                         try:
                             mixer.music.fadeout(1000)  # Fade out over 1 second
-                            mixer.music.load('ambient_track.mp3')
+                            mixer.music.load('Sounds/ambient_track.mp3')
                             mixer.music.play(-1)
                         except pygame.error as e:
                             print(f"Could not load or play the game music file: {e}")
 
                         game.multiplayer = True
-                        game.connect_to_server(menu.get_ip_address())
+
+                        game.connect_to_server(input("Enter IP "))
                         current_state = GameState.PLAYING
                     elif action == "quit":
                         pygame.quit()

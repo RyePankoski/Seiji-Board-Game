@@ -81,6 +81,52 @@ class DrawUtils:
             text_rect.top = GRID_OFFSET + BOARD_SIZE * CELL_SIZE + 10  # Adjust to position above the grid
             screen.blit(text, text_rect)
 
+    def draw_menu(screen, menu):
+        """Draw the menu screen with all its components"""
+        # Draw background
+        screen.fill((50, 50, 50))
+
+        # Draw each button with its texture and border
+        for border_rect, (button_rect, text) in zip(menu.button_borders, menu.buttons):
+            # Draw border
+            pygame.draw.rect(screen, (200, 200, 200), border_rect)
+
+            # Draw button background
+            pygame.draw.rect(screen, (100, 100, 100), button_rect)
+
+            # Draw texture if available
+            if menu.texture:
+                # Create a subsurface of the texture sized to the button
+                texture_rect = menu.texture.get_rect()
+                scale_factor = max(button_rect.width / texture_rect.width,
+                                 button_rect.height / texture_rect.height)
+
+                scaled_width = int(texture_rect.width * scale_factor)
+                scaled_height = int(texture_rect.height * scale_factor)
+
+                scaled_texture = pygame.transform.scale(menu.texture,
+                                                     (scaled_width, scaled_height))
+
+                # Center the texture on the button
+                texture_x = button_rect.x + (button_rect.width - scaled_width) // 2
+                texture_y = button_rect.y + (button_rect.height - scaled_height) // 2
+
+                # Create a mask to keep the texture within the button bounds
+                button_surface = pygame.Surface((button_rect.width, button_rect.height))
+                button_surface.fill((100, 100, 100))
+                screen.blit(scaled_texture, (texture_x, texture_y),
+                           special_flags=pygame.BLEND_RGBA_MULT)
+
+            # Draw text
+            DrawUtils._draw_menu_text(screen, text, button_rect, menu.font)
+
+    @staticmethod
+    def _draw_menu_text(screen, text, button, font):
+        """Helper method to draw text on menu buttons"""
+        text_surface = font.render(text, True, (255, 255, 255))
+        text_rect = text_surface.get_rect(center=button.center)
+        screen.blit(text_surface, text_rect)
+
     @staticmethod
     def _draw_center_x(screen):
         """Draw the X in the center of the board"""
