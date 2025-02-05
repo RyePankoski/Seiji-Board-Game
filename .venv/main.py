@@ -148,6 +148,7 @@ class Game:
         self.table_texture = pygame.image.load("Textures/tables.png").convert_alpha()
 
         self.message_log = []
+        self.most_recent_message = None
         self.max_messages = 10  # Maximum number of messages to show
         self.log_font = pygame.font.Font(None, 24)  # Font for the log
         self.log_rect = pygame.Rect(
@@ -195,7 +196,8 @@ class Game:
             "board": serializable_board,
             "current_player": self.current_player,
             "player_1_reserve": self.player1_reserve,
-            "player_2_reserve": self.player2_reserve
+            "player_2_reserve": self.player2_reserve,
+            "most_recent_message": self.most_recent_message
         }
 
     def update_game_state(self, new_state):
@@ -222,6 +224,7 @@ class Game:
         self.current_player = new_state["current_player"]
         self.player1_reserve = new_state["player_1_reserve"]
         self.player2_reserve = new_state["player_2_reserve"]
+        self.add_to_log(new_state["most_recent_message"])
 
         self.did_someone_win()
 
@@ -245,6 +248,7 @@ class Game:
     def add_to_log(self, message):
         """Add a new message to the game log"""
         self.message_log.append(message)
+        self.most_recent_message = message
         if len(self.message_log) > self.max_messages:
             self.message_log.pop(0)  # Remove oldest message if we exceed max
 
