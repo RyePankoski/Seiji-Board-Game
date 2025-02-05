@@ -187,7 +187,6 @@ class Game:
                         "move_distance": piece.move_distance,
                         "owner": piece.owner,
                         "promoted": piece.promoted,
-                        "promote_sound_played": piece.promote_sound_played
                     })
             serializable_board.append(board_row)
 
