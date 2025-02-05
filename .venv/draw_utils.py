@@ -161,6 +161,38 @@ class DrawUtils:
             # Draw text with larger font
             DrawUtils._draw_menu_text(screen, text, button_rect, menu.font, size=40)
 
+        if menu.show_ip_dialog:
+            # Draw semi-transparent black overlay
+            overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+            overlay.fill((0, 0, 0))
+            overlay.set_alpha(200)
+            screen.blit(overlay, (0, 0))
+
+            # Draw IP dialog
+            dialog_width = 400
+            dialog_height = 200
+            dialog_x = (WINDOW_WIDTH - dialog_width) // 2
+            dialog_y = (WINDOW_HEIGHT - dialog_height) // 2
+
+            # Draw dialog box
+            pygame.draw.rect(screen, (0, 0, 0), (dialog_x, dialog_y, dialog_width, dialog_height))
+            pygame.draw.rect(screen, (255, 255, 255), (dialog_x, dialog_y, dialog_width, dialog_height), 2)
+
+            # Draw text
+            font = pygame.font.Font(None, 32)
+            title = font.render("Enter Server IP", True, (255, 255, 255))
+            screen.blit(title, (dialog_x + 20, dialog_y + 20))
+
+            # Draw input box
+            input_box = pygame.Rect(dialog_x + 20, dialog_y + 70, dialog_width - 40, 40)
+            pygame.draw.rect(screen, (50, 50, 50), input_box)
+            pygame.draw.rect(screen, (255, 255, 255), input_box, 2)
+
+            # Draw input text
+            if hasattr(menu, 'ip_input'):
+                text = font.render(menu.ip_input, True, (255, 255, 255))
+                screen.blit(text, (input_box.x + 5, input_box.y + 10))
+
     @staticmethod
     def _draw_menu_text(screen, text, button, font, size=50):  # Increased size from 40 to 50
         """Helper method to draw text on menu buttons with specified size"""

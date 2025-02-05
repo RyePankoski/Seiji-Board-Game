@@ -14,6 +14,8 @@ pygame.init()
 
 class MenuScreen:
     def __init__(self):
+        self.show_ip_dialog = False
+
         try:
             self.font = pygame.font.Font('Fonts/font.otf', 60)
             self.title_font = pygame.font.Font('Fonts/font.otf', 90)
@@ -617,7 +619,6 @@ class Game:
         return False
 
     def process_network_updates(self):
-        """Processes any pending network updates"""
         if self.multiplayer:
             self.network_manager.process_network_updates(self.update_game_state)
 
@@ -634,9 +635,9 @@ def main():
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Board Game Prototype")
 
-    # Load and start playing the ambient track
+    # Load and start menu music
     try:
-        mixer.music.load('Sounds/menu_theme.mp3')  # Create a separate menu music file
+        mixer.music.load('Sounds/menu_theme.mp3')
         mixer.music.set_volume(0.5)
         mixer.music.play(-1)
     except pygame.error as e:
@@ -645,51 +646,72 @@ def main():
     game = Game()
     current_state = GameState.MENU
     menu = MenuScreen()
+    menu.ip_input = ""  # Add IP input field
     clock = pygame.time.Clock()
 
     while True:
         if current_state == GameState.MENU:
-            # Handle menu state
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
 
-                if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.type == pygame.MOUSEBUTTONDOWN and not menu.show_ip_dialog:
                     mouse_x, mouse_y = pygame.mouse.get_pos()
                     action = menu.handle_click(mouse_x, mouse_y)
 
                     if action == "Alone":
+                        # Handle single player mode
                         fade_transition(screen)
-
                         try:
-                            mixer.music.fadeout(1000)  # Fade out over 1 second
+                            mixer.music.fadeout(1000)
                             mixer.music.load('Sounds/ambient_track.mp3')
                             mixer.music.play(-1)
                         except pygame.error as e:
                             print(f"Could not load or play the game music file: {e}")
-
                         game.multiplayer = False
                         current_state = GameState.PLAYING
+
                     elif action == "Amidst":
-                        fade_transition(screen)
+                        # Show IP input dialog
+                        menu.show_ip_dialog = True
+                        menu.ip_input = ""
 
-                        try:
-                            mixer.music.fadeout(1000)  # Fade out over 1 second
-                            mixer.music.load('Sounds/ambient_track.mp3')
-                            mixer.music.play(-1)
-                        except pygame.error as e:
-                            print(f"Could not load or play the game music file: {e}")
-
-                        game.multiplayer = True
-
-                        game.connect_to_server(input("Enter IP: "))
-                        current_state = GameState.PLAYING
                     elif action == "Abandon":
                         pygame.quit()
                         sys.exit()
 
-            menu.draw(screen)
+                # Handle IP dialog input
+                if menu.show_ip_dialog:
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_RETURN and menu.ip_input.strip():
+                            # Connect and start multiplayer game
+                            fade_transition(screen)
+                            try:
+                                mixer.music.fadeout(1000)
+                                mixer.music.load('Sounds/ambient_track.mp3')
+                                mixer.music.play(-1)
+                            except pygame.error as e:
+                                print(f"Could not load or play the game music file: {e}")
+
+                            game.multiplayer = True
+                            game.connect_to_server(menu.ip_input)
+                            menu.show_ip_dialog = False
+                            current_state = GameState.PLAYING
+
+                        elif event.key == pygame.K_ESCAPE:
+                            # Cancel IP input
+                            menu.show_ip_dialog = False
+                            menu.ip_input = ""
+
+                        elif event.key == pygame.K_BACKSPACE:
+                            # Handle backspace
+                            menu.ip_input = menu.ip_input[:-1]
+
+                        else:
+                            # Add typed characters
+                            if event.unicode.isprintable():
+                                menu.ip_input += event.unicode
 
         elif current_state == GameState.PLAYING:
             for event in pygame.event.get():
@@ -698,31 +720,29 @@ def main():
                     sys.exit()
 
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_UP:  # Volume up
+                    # Volume controls
+                    if event.key == pygame.K_UP:
                         current_volume = mixer.music.get_volume()
                         mixer.music.set_volume(min(1.0, current_volume + 0.1))
-                    elif event.key == pygame.K_DOWN:  # Volume down
+                    elif event.key == pygame.K_DOWN:
                         current_volume = mixer.music.get_volume()
                         mixer.music.set_volume(max(0.0, current_volume - 0.1))
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     mouse_x, mouse_y = pygame.mouse.get_pos()
 
-                    # Check if mute button was clicked
+                    # Handle mute button
                     if game.mute_button_rect.collidepoint(mouse_x, mouse_y):
                         game.is_muted = not game.is_muted
-                        if game.is_muted:
-                            mixer.music.set_volume(0)
-                        else:
-                            mixer.music.set_volume(1)
+                        mixer.music.set_volume(0 if game.is_muted else 1)
                         continue
 
-                    # Check if a reserve piece is clicked
+                    # Handle reserve piece selection
                     reserve_clicked = game.check_reserve_click(mouse_x, mouse_y)
                     if reserve_clicked:
                         game.reserve_selected = True
 
-                    # Handle the board click if within bounds
+                    # Handle board clicks
                     col = (mouse_x - GRID_OFFSET) // CELL_SIZE
                     row = (mouse_y - GRID_OFFSET) // CELL_SIZE
                     if 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE:
@@ -730,6 +750,10 @@ def main():
 
             game.process_network_updates()
             DrawUtils.draw(game, screen)
+
+        # Draw current state
+        if current_state == GameState.MENU:
+            menu.draw(screen)
 
         pygame.display.flip()
         clock.tick(15)
