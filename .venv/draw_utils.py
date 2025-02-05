@@ -93,6 +93,12 @@ class DrawUtils:
 
         # Draw the grid
         DrawUtils._draw_grid(screen)
+        DrawUtils._draw_coordinates(screen)  # Add this line
+
+        if game.is_king_placement_phase():
+            DrawUtils.draw_red_center(screen)
+        else:
+            DrawUtils._draw_center_x(screen)
 
         # Draw the center X
         DrawUtils._draw_center_x(screen)
@@ -120,9 +126,45 @@ class DrawUtils:
             DrawUtils._draw_selected_reserve_piece(game, screen)
 
         # Draw mute button and game info
+        DrawUtils._draw_resign_button(game, screen)
         DrawUtils._draw_mute_button(game, screen)
         DrawUtils._draw_game_info(game, screen)
 
+    @staticmethod
+    def _draw_resign_button(game, screen):
+        """Draw the resign button in the top right corner"""
+        button_color = (200, 50, 50) if game.resign_hover else (150, 30, 30)
+        pygame.draw.rect(screen, button_color, game.resign_button_rect)
+        pygame.draw.rect(screen, (255, 255, 255), game.resign_button_rect, 2)  # White border
+
+        # Draw button text
+        font = pygame.font.Font('Fonts/general_text.ttf', 30)  # Use the custom font instead of None
+        text = font.render("Resign", True, (255, 255, 255))
+        text_rect = text.get_rect(center=game.resign_button_rect.center)
+        screen.blit(text, text_rect)
+    @staticmethod
+    def _draw_coordinates(screen, color=(255, 255, 255)):  # Added color parameter with white as default
+        """Draw coordinate numbers on the left and bottom edges of the board"""
+        # Set up the font
+        font = pygame.font.Font(None, int(CELL_SIZE * 0.5))  # Font size relative to cell size
+
+        # Calculate padding for number placement
+        padding = CELL_SIZE * 0.3
+
+        for i in range(BOARD_SIZE):
+            # Bottom numbers count left to right (1 to n)
+            bottom_number = str(i + 1)
+            text = font.render(bottom_number, True, color)  # Using custom color
+            x = GRID_OFFSET + (i * CELL_SIZE) + (CELL_SIZE - text.get_width()) // 2
+            y = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + padding
+            screen.blit(text, (x, y))
+
+            # Left numbers count top to bottom (1 to n)
+            left_number = str(BOARD_SIZE - i)
+            text = font.render(left_number, True, color)  # Using custom color
+            x = GRID_OFFSET - padding - text.get_width()
+            y = GRID_OFFSET + (i * CELL_SIZE) + (CELL_SIZE - text.get_height()) // 2
+            screen.blit(text, (x, y))
     @staticmethod
     def draw_menu(screen, menu):
         """Draw the menu screen with starfield effect and all its components"""
@@ -138,8 +180,8 @@ class DrawUtils:
         menu.starfield.draw(screen)
 
         # Draw title "Deceit" at the top
-        title_font = pygame.font.Font("Fonts/font.otf", 100)  # Using your custom font
-        title_text = title_font.render("Deceit", True, (255, 255, 255))
+        title_font = pygame.font.Font("Fonts/general_text.ttf", 100)  # Using your custom font
+        title_text = title_font.render("DECEIT", True, (255, 255, 255))
         title_rect = title_text.get_rect(centerx=screen.get_width() // 2, top=50)
         screen.blit(title_text, title_rect)
 
@@ -149,7 +191,7 @@ class DrawUtils:
             # Increase button size
             button_rect.height = button_height
             border_rect.height = button_height + 4
-            
+
             # Draw text with larger font
             DrawUtils._draw_menu_text(screen, text, button_rect, menu.font, size=40)
 
@@ -272,6 +314,28 @@ class DrawUtils:
                          (center_x, center_y + CELL_SIZE),
                          width=2)
 
+    # Add this static method to the DrawUtils class:
+    @staticmethod
+    def draw_red_center(screen):
+        """Draw a transparent red highlight in the center of the board with an X"""
+        center_x = GRID_OFFSET + (BOARD_SIZE // 2) * CELL_SIZE
+        center_y = GRID_OFFSET + (BOARD_SIZE // 2) * CELL_SIZE
+
+        # Create a surface for the transparent red square
+        red_surface = pygame.Surface((CELL_SIZE, CELL_SIZE), pygame.SRCALPHA)
+        pygame.draw.rect(red_surface, (255, 0, 0, 128), (0, 0, CELL_SIZE, CELL_SIZE))  # 128 is half transparency
+        screen.blit(red_surface, (center_x, center_y))
+
+        # Draw the X lines in white for contrast
+        pygame.draw.line(screen, (255, 255, 255),
+                         (center_x, center_y),
+                         (center_x + CELL_SIZE, center_y + CELL_SIZE),
+                         width=3)
+        pygame.draw.line(screen, (255, 255, 255),
+                         (center_x + CELL_SIZE, center_y),
+                         (center_x, center_y + CELL_SIZE),
+                         width=3)
+
     @staticmethod
     def _draw_grid(screen):
         """Draw the game board grid"""
@@ -339,7 +403,7 @@ class DrawUtils:
             pygame.draw.line(screen, RED, (x + 40, y + 15), (x + 55, y + 45), 3)
             pygame.draw.line(screen, RED, (x + 55, y + 15), (x + 40, y + 45), 3)
 
-        font = pygame.font.Font(None, 30)
+        font = pygame.font.Font('Fonts/general_text.ttf', 25)
         text = font.render("Use arrows keys to adjust volume", True, BLACK)
         screen.blit(text, (x + 70, y + 20))
 
@@ -479,46 +543,12 @@ class DrawUtils:
 
     @staticmethod
     def _draw_game_info(game, screen):
-        """Draw game information including current player and game over message"""
+        """Draw game information including current player"""
         display_name = "White" if game.current_player == PLAYER_1 else "Black"
 
-        font = pygame.font.Font(None, 36)
-        text3 = font.render(f"Player to move: {display_name}", True, WHITE)
-        screen.blit(text3, (10, 10))
-
-        if game.game_over:
-            winner_text = "WHITE WINS" if game.winner == PLAYER_1 else "BLACK WINS"
-
-            # Use a much larger font for the end game message
-            end_game_font = pygame.font.Font(None, 250)
-            text5 = end_game_font.render(winner_text, True, YELLOW)
-
-            # Get the width and height of the text to center it
-            text_rect = text5.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
-
-            # Create a black outline effect
-            outline_offset = 5
-            # List of all 8 directions for the outline
-            outline_positions = [
-                (-outline_offset, -outline_offset),  # Top-left
-                (0, -outline_offset),  # Top
-                (outline_offset, -outline_offset),  # Top-right
-                (-outline_offset, 0),  # Left
-                (outline_offset, 0),  # Right
-                (-outline_offset, outline_offset),  # Bottom-left
-                (0, outline_offset),  # Bottom
-                (outline_offset, outline_offset)  # Bottom-right
-            ]
-
-            # Draw the outline
-            for x_offset, y_offset in outline_positions:
-                outline_rect = text_rect.copy()
-                outline_rect.x += x_offset
-                outline_rect.y += y_offset
-                screen.blit(end_game_font.render(winner_text, True, BLACK), outline_rect)
-
-            # Draw the main text in the center of the screen
-            screen.blit(text5, text_rect)
+        font = pygame.font.Font('Fonts/general_text.ttf', 36)
+        text = font.render(f"Player to move: {display_name}", True, WHITE)
+        screen.blit(text, (10, 10))
 
     @staticmethod
     def _draw_selected_reserve_piece(game, screen):

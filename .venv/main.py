@@ -1,37 +1,20 @@
 import pygame
-import sys
-from typing import List
-from draw_utils import DrawUtils
-from constants import *
-import socket
-import json
-import threading
-import queue
 from pygame import mixer
-from network_manager import NetworkManager
+from constants import WINDOW_WIDTH, WINDOW_HEIGHT, BOARD_SIZE, CELL_SIZE, GRID_OFFSET
+from game_state import GameState
 from UI import MenuScreen
+from draw_utils import DrawUtils
+from main_ultilities import MainUtilities
+from constants import *
+from network_manager import NetworkManager
+import queue
+import threading
 from piece import Piece
+from UI import PostGameScreen
+
 
 # Initialize Pygame
 pygame.init()
-
-def fade_transition(screen):
-    fade_surface = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
-    fade_surface.fill((0, 0, 0))  # Black fade
-
-    for alpha in range(0, 255, 5):  # Fade in
-        fade_surface.set_alpha(alpha)
-        screen.blit(fade_surface, (0, 0))
-        pygame.display.flip()
-        pygame.time.delay(10)  # Small delay to control fade speed
-
-
-class GameState:
-    MENU = "menu"
-    PLAYING = "playing"
-    PLACEMENT = "placement"
-    MOVEMENT = "movement"
-    GAME_OVER = "game_over"
 
 
 class Game:
@@ -51,9 +34,6 @@ class Game:
         self.network_manager = NetworkManager()
         self.multiplayer = False
 
-        self.update_queue = queue.Queue()
-        self.lock = threading.Lock()
-
         self.place_sound = pygame.mixer.Sound("Sounds/place_sound.mp3")  # Replace with actual file path
         self.slide_sound = pygame.mixer.Sound("Sounds/slide_sound.mp3")
         self.pick_up = pygame.mixer.Sound("Sounds/pick_up.mp3")
@@ -71,6 +51,9 @@ class Game:
         self.background_2 = pygame.image.load("Textures/background_2.png")
         self.background_2 = pygame.transform.scale(self.background_2, (WINDOW_WIDTH, WINDOW_HEIGHT))
         self.table_texture = pygame.image.load("Textures/tables.png").convert_alpha()
+
+        self.resign_button_rect = pygame.Rect(WINDOW_WIDTH - 120, 10, 100, 40)  # Top right corner
+        self.resign_hover = False
 
         self.message_log = []
         self.most_recent_message = None
@@ -104,6 +87,46 @@ class Game:
                 self.player2_reserve,
                 self.most_recent_message
             )
+
+    def reset_game(self):
+        """Reset the game state for a new game"""
+        self.board = [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
+        self.current_player = PLAYER_1
+        self.pieces_in_hand = {PLAYER_1: NUMBER_OF_PIECES, PLAYER_2: NUMBER_OF_PIECES}
+        self.selected_piece = None
+        self.valid_moves = []
+        self.kings_placed = {PLAYER_1: False, PLAYER_2: False}
+        self.game_over = False
+        self.winner = None
+        self.reserve_selected = False
+        self.selected_reserve_piece = None
+        self.monarch_placement_phase = True
+
+        # Reset piece reserves
+        self.player1_reserve = [
+            ["Advisor"] * ADVISOR_NUMBER,
+            ["Official"] * OFFICIAL_NUMBER,
+            ["Palace"] * PALACE_NUMBER
+        ]
+        self.player2_reserve = [
+            ["Advisor"] * ADVISOR_NUMBER,
+            ["Official"] * OFFICIAL_NUMBER,
+            ["Palace"] * PALACE_NUMBER
+        ]
+
+        # Clear message log
+        self.message_log = []
+        self.most_recent_message = None
+
+    def handle_resign(self):
+        """Handle the resignation of current player"""
+        if not self.game_over:
+            self.game_over = True
+            self.winner = PLAYER_2 if self.current_player == PLAYER_1 else PLAYER_1
+            self.add_to_log(f"Player {self.current_player} resigned")
+            if not self.is_muted:
+                self.endgame.play()
+            self.network_finish_move()
 
     def process_network_updates(self):
         """Process any pending network updates"""
@@ -321,9 +344,9 @@ class Game:
                 reserve[0 if target.name == "Advisor" else 1].append(target.name)
                 self.pieces_in_hand[player] += 1
             self.capture.play()
-            action = f"captured {target.name} at {to_col + 1},{13 - to_row}"
+            action = f"captured {target.name} at {to_col + 1},{BOARD_SIZE - to_row}"
         else:
-            action = f"moved {piece.name} to: {to_col + 1},{13 - to_row}"
+            action = f"moved {piece.name} to: {to_col + 1},{BOARD_SIZE - to_row}"
 
         self.add_to_log(f"Player {player} {action}")
         self.board[to_row][to_col], self.board[from_row][from_col] = piece, EMPTY
@@ -364,7 +387,7 @@ class Game:
         self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
 
         # Log and sound
-        self.add_to_log(f"Player {self.board[row][col].owner} placed {piece_type} at: {col + 1},{13 - row}")
+        self.add_to_log(f"Player {self.board[row][col].owner} placed {piece_type} at: {col + 1},{BOARD_SIZE - row}")
         self.place_sound.play()
 
         return True
@@ -376,7 +399,7 @@ class Game:
         self.kings_placed[self.current_player] = True
         self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
         self.place_sound.play()
-        self.add_to_log(f"Player {king_to_place.owner} placed Monarch at {col + 1},{13 - row}")
+        self.add_to_log(f"Player {king_to_place.owner} placed Monarch at {col + 1},{BOARD_SIZE - row}")
 
     def end_of_move(self):
         self.check_board_promotions()
@@ -437,6 +460,12 @@ class Game:
                 return
 
             if self.is_king_placement_phase():
+                # Check if clicked position is the center
+                center_row = BOARD_SIZE // 2
+                center_col = BOARD_SIZE // 2
+                if row == center_row and col == center_col:
+                    return  # Don't allow placement in center
+
                 if self.board[row][col] == EMPTY:
                     self.place_monarch(row, col)
                 return
@@ -473,7 +502,6 @@ class Game:
         finally:
             self.end_of_move()
 
-# For handling audio
 def main():
     pygame.init()
     mixer.init()
@@ -481,130 +509,107 @@ def main():
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Board Game Prototype")
 
-    # Load and start menu music
-    try:
-        mixer.music.load('Sounds/menu_theme.mp3')
-        mixer.music.set_volume(0.5)
-        mixer.music.play(-1)
-    except pygame.error as e:
-        print(f"Could not load or play the menu music file: {e}")
-
+    utils = MainUtilities()
     game = Game()
     current_state = GameState.MENU
     menu = MenuScreen()
-    menu.ip_input = ""  # Add IP input field
+    post_game_screen = PostGameScreen()
+    menu.ip_input = ""
     clock = pygame.time.Clock()
 
     while True:
         if current_state == GameState.MENU:
+            clock.tick(35)
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+                    utils.handle_exit(screen)
 
                 if event.type == pygame.MOUSEBUTTONDOWN and not menu.show_ip_dialog:
                     mouse_x, mouse_y = pygame.mouse.get_pos()
                     action = menu.handle_click(mouse_x, mouse_y)
 
                     if action == "Alone":
-                        # Handle single player mode
-                        fade_transition(screen)
-                        try:
-                            mixer.music.fadeout(1000)
-                            mixer.music.load('Sounds/ambient_track.mp3')
-                            mixer.music.play(-1)
-                        except pygame.error as e:
-                            print(f"Could not load or play the game music file: {e}")
+                        utils.fade_to_black(screen)
+                        utils.handle_music_transition('Sounds/ambient_track.mp3')
                         game.multiplayer = False
                         current_state = GameState.PLAYING
-
                     elif action == "Amidst":
-                        # Show IP input dialog
                         menu.show_ip_dialog = True
+                        utils.play_sound('multiplayer_connect')
                         menu.ip_input = ""
-
                     elif action == "Abandon":
-                        pygame.quit()
-                        sys.exit()
+                        utils.handle_exit(screen)
 
-                # Handle IP dialog input
-                if menu.show_ip_dialog:
-                    if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_RETURN and menu.ip_input.strip():
-                            # Connect and start multiplayer game
-                            fade_transition(screen)
-                            try:
-                                mixer.music.fadeout(1000)
-                                mixer.music.load('Sounds/ambient_track.mp3')
-                                mixer.music.play(-1)
-                            except pygame.error as e:
-                                print(f"Could not load or play the game music file: {e}")
-
-                            if game.network_manager.connect_to_server(menu.ip_input):
-                                game.multiplayer = True
-                                menu.show_ip_dialog = False
-                                current_state = GameState.PLAYING
-
-                        elif event.key == pygame.K_ESCAPE:
-                            # Cancel IP input
-                            menu.show_ip_dialog = False
-                            menu.ip_input = ""
-
-                        elif event.key == pygame.K_BACKSPACE:
-                            # Handle backspace
-                            menu.ip_input = menu.ip_input[:-1]
-
-                        else:
-                            # Add typed characters
-                            if event.unicode.isprintable():
-                                menu.ip_input += event.unicode
+                if menu.show_ip_dialog and event.type == pygame.KEYDOWN:
+                    if utils.handle_ip_input(event, menu):
+                        current_state = utils.handle_multiplayer_connection(game, menu, screen)
 
         elif current_state == GameState.PLAYING:
+            clock.tick(10)
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+                    utils.handle_exit(screen)
 
                 if event.type == pygame.KEYDOWN:
-                    # Volume controls
-                    if event.key == pygame.K_UP:
-                        current_volume = mixer.music.get_volume()
-                        mixer.music.set_volume(min(1.0, current_volume + 0.1))
-                    elif event.key == pygame.K_DOWN:
-                        current_volume = mixer.music.get_volume()
-                        mixer.music.set_volume(max(0.0, current_volume - 0.1))
+                    utils.handle_volume_control(event)
+
+                if event.type == pygame.MOUSEMOTION:
+                    mouse_x, mouse_y = pygame.mouse.get_pos()
+                    game.resign_hover = game.resign_button_rect.collidepoint(mouse_x, mouse_y)
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     mouse_x, mouse_y = pygame.mouse.get_pos()
 
-                    # Handle mute button
                     if game.mute_button_rect.collidepoint(mouse_x, mouse_y):
                         game.is_muted = not game.is_muted
                         mixer.music.set_volume(0 if game.is_muted else 1)
                         continue
 
-                    # Handle reserve piece selection
-                    reserve_clicked = game.check_reserve_click(mouse_x, mouse_y)
-                    if reserve_clicked:
+                    if game.resign_button_rect.collidepoint(mouse_x, mouse_y):
+                        game.handle_resign()
+                        current_state = GameState.POST_GAME
+                        continue
+
+                    if game.check_reserve_click(mouse_x, mouse_y):
                         game.reserve_selected = True
 
-                    # Handle board clicks
                     col = (mouse_x - GRID_OFFSET) // CELL_SIZE
                     row = (mouse_y - GRID_OFFSET) // CELL_SIZE
                     if 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE:
                         game.handle_click(row, col)
 
             game.process_network_updates()
-            DrawUtils.draw(game, screen)
-            DrawUtils.draw_message_log(game, screen)
+            if game.game_over:
+                current_state = GameState.POST_GAME
+            else:
+                DrawUtils.draw(game, screen)
+                DrawUtils.draw_message_log(game, screen)
 
-        # Draw current state
+        elif current_state == GameState.POST_GAME:
+            clock.tick(35)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    utils.handle_exit(screen)
+
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    mouse_x, mouse_y = pygame.mouse.get_pos()
+                    action = post_game_screen.handle_click(mouse_x, mouse_y)
+
+                    if action == "Rematch":
+                        game.reset_game()
+                        current_state = GameState.PLAYING
+                    elif action == "Menu":
+                        game.reset_game()
+                        current_state = GameState.MENU
+                        utils.handle_music_transition('Sounds/menu_track.mp3')
+
+            winner_text = "WHITE WINS" if game.winner == PLAYER_1 else "BLACK WINS"
+            post_game_screen.draw(screen, winner_text)
+
         if current_state == GameState.MENU:
             menu.draw(screen)
 
         pygame.display.flip()
-        clock.tick(15)
-
 
 if __name__ == "__main__":
     main()
