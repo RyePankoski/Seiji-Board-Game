@@ -1,5 +1,73 @@
 import pygame
+import random
+import math
 from constants import *
+
+
+class StarPoint:
+    def __init__(self, center_x, center_y):
+        # Initialize near center with random offset
+        offset_x = random.uniform(-5, 5)
+        offset_y = random.uniform(-5, 5)
+        self.position = [center_x + offset_x, center_y + offset_y]
+        self.center = (center_x, center_y)  # Store center for distance calculation
+
+        # Start with a very small size
+        self.size = 0.5
+
+        # Random vector between -1 and 1 for each component, without normalization
+        x = random.uniform(-1, 1)
+        y = random.uniform(-1, 1)
+        self.vector = (x, y)
+
+    def update(self, speed):
+        # Update position based on vector
+        self.position[0] += self.vector[0] * speed
+        self.position[1] += self.vector[1] * speed
+
+        # Calculate distance from center
+        dx = self.position[0] - self.center[0]
+        dy = self.position[1] - self.center[1]
+        distance = (dx * dx + dy * dy) ** 0.5
+
+        # Gradually increase size based on distance
+        # Starting from 0.5, growing to max 2.5
+        self.size = 0.5 + (distance / 400)  # Adjust 400 to control growth rate
+        self.size = min(2.5, self.size)  # Cap maximum size
+
+    def is_off_screen(self, width, height):
+        return (self.position[0] < 0 or self.position[0] > width or
+                self.position[1] < 0 or self.position[1] > height)
+
+
+class MenuStarfield:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.stars = []
+        self.center = (width // 2, height // 2)
+        self.frame_counter = 0
+        self.spawn_interval = 2
+        self.max_stars = 200
+        self.speed = 8
+
+    def update(self):
+        self.frame_counter += 1
+
+        # Spawn new star every few frames if under max
+        if self.frame_counter % self.spawn_interval == 0 and len(self.stars) < self.max_stars:
+            self.stars.append(StarPoint(self.center[0], self.center[1]))
+
+        # Update existing stars and remove ones that are off screen
+        self.stars = [star for star in self.stars if not star.is_off_screen(self.width, self.height)]
+        for star in self.stars:
+            star.update(self.speed)
+
+    def draw(self, screen):
+        for star in self.stars:
+            pygame.draw.circle(screen, (255, 255, 255),
+                               (int(star.position[0]), int(star.position[1])),
+                               star.size)  # Use dynamic size
 
 
 class DrawUtils:
@@ -11,7 +79,7 @@ class DrawUtils:
         # Draw board border first (3D effect)
         border_width = 8
         # Outer dark border (shadow)
-        pygame.draw.rect(screen, (40, 40, 40),
+        pygame.draw.rect(screen, (40, 40, 40,),
                          (GRID_OFFSET - border_width,
                           GRID_OFFSET - border_width,
                           BOARD_SIZE * CELL_SIZE + border_width * 2,
@@ -23,109 +91,95 @@ class DrawUtils:
                           BOARD_SIZE * CELL_SIZE + border_width,
                           BOARD_SIZE * CELL_SIZE + border_width))
 
-        # Draw main board background
-        screen.blit(game.background, (GRID_OFFSET, GRID_OFFSET))
+        board_size = BOARD_SIZE * CELL_SIZE
+        board_background = pygame.transform.scale(game.background, (board_size, board_size))
+        screen.blit(board_background, (GRID_OFFSET, GRID_OFFSET))
 
-        # Draw center X
-        DrawUtils._draw_center_x(screen)
-
-        # Draw grid
+        # Draw the grid
         DrawUtils._draw_grid(screen)
 
-        # Show valid placement squares for piece placement phase
-        if not game.selected_piece and not game.is_king_placement_phase() and game.reserve_selected:
+        # Draw the center X
+        DrawUtils._draw_center_x(screen)
+
+        # Draw valid placements if in placement phase
+        if game.selected_reserve_piece:
             DrawUtils._draw_valid_placements(game, screen)
 
-        # Draw valid moves for selected piece
-        DrawUtils._draw_valid_moves(game, screen)
+        # Draw valid moves if a piece is selected
+        if game.selected_piece:
+            DrawUtils._draw_valid_moves(game, screen)
 
-        # Draw the mute button
-        DrawUtils._draw_mute_button(game, screen)
-
-        # Draw the selected piece highlight
+        # Draw selected piece highlight
         if game.selected_piece:
             DrawUtils._draw_selected_piece_highlight(game, screen)
 
-        # Draw the pieces on the board
+        # Draw all pieces
         DrawUtils._draw_pieces_on_board(game, screen)
 
-        # Draw piece reserve area on the right side
+        # Draw piece reserve
         DrawUtils._draw_piece_reserve(game, screen)
-
-        # Draw phase and current player info at the top
-        DrawUtils._draw_game_info(game, screen)
 
         # Draw selected reserve piece highlight
         if game.selected_reserve_piece:
             DrawUtils._draw_selected_reserve_piece(game, screen)
 
-        game.draw_message_log(screen)
-
-        # Draw row and column numbers
-        font = pygame.font.SysFont(None, 24)
-        text_color = (255, 255, 255)  # Black for visibility
-
-        # Draw numbers along the left side (rows)
-        for row in range(1, BOARD_SIZE + 1):
-            text = font.render(str(row), True, text_color)
-            text_rect = text.get_rect()
-            text_rect.right = GRID_OFFSET - 10  # 10 pixels padding from the grid
-            text_rect.centery = GRID_OFFSET + (BOARD_SIZE - row + 0.5) * CELL_SIZE  # Adjust for bottom-up numbering
-            screen.blit(text, text_rect)
-
-        # Draw numbers along the bottom (columns)
-        for col in range(1, BOARD_SIZE + 1):
-            text = font.render(str(col), True, text_color)
-            text_rect = text.get_rect()
-            text_rect.centerx = GRID_OFFSET + (col - 0.5) * CELL_SIZE
-            text_rect.top = GRID_OFFSET + BOARD_SIZE * CELL_SIZE + 10  # Adjust to position above the grid
-            screen.blit(text, text_rect)
-
-    def draw_menu(screen, menu):
-        """Draw the menu screen with all its components"""
-        # Draw background
-        screen.fill((50, 50, 50))
-
-        # Draw each button with its texture and border
-        for border_rect, (button_rect, text) in zip(menu.button_borders, menu.buttons):
-            # Draw border
-            pygame.draw.rect(screen, (200, 200, 200), border_rect)
-
-            # Draw button background
-            pygame.draw.rect(screen, (100, 100, 100), button_rect)
-
-            # Draw texture if available
-            if menu.texture:
-                # Create a subsurface of the texture sized to the button
-                texture_rect = menu.texture.get_rect()
-                scale_factor = max(button_rect.width / texture_rect.width,
-                                 button_rect.height / texture_rect.height)
-
-                scaled_width = int(texture_rect.width * scale_factor)
-                scaled_height = int(texture_rect.height * scale_factor)
-
-                scaled_texture = pygame.transform.scale(menu.texture,
-                                                     (scaled_width, scaled_height))
-
-                # Center the texture on the button
-                texture_x = button_rect.x + (button_rect.width - scaled_width) // 2
-                texture_y = button_rect.y + (button_rect.height - scaled_height) // 2
-
-                # Create a mask to keep the texture within the button bounds
-                button_surface = pygame.Surface((button_rect.width, button_rect.height))
-                button_surface.fill((100, 100, 100))
-                screen.blit(scaled_texture, (texture_x, texture_y),
-                           special_flags=pygame.BLEND_RGBA_MULT)
-
-            # Draw text
-            DrawUtils._draw_menu_text(screen, text, button_rect, menu.font)
+        # Draw mute button and game info
+        DrawUtils._draw_mute_button(game, screen)
+        DrawUtils._draw_game_info(game, screen)
 
     @staticmethod
-    def _draw_menu_text(screen, text, button, font):
-        """Helper method to draw text on menu buttons"""
-        text_surface = font.render(text, True, (255, 255, 255))
-        text_rect = text_surface.get_rect(center=button.center)
-        screen.blit(text_surface, text_rect)
+    def draw_menu(screen, menu):
+        """Draw the menu screen with starfield effect and all its components"""
+        # Initialize starfield if not already created
+        if not hasattr(menu, 'starfield'):
+            menu.starfield = MenuStarfield(screen.get_width(), screen.get_height())
+
+        # Draw black background
+        screen.fill((0, 0, 0))
+
+        # Update and draw starfield
+        menu.starfield.update()
+        menu.starfield.draw(screen)
+
+        # Draw title "Deceit" at the top
+        title_font = pygame.font.Font("Fonts/font.otf", 100)  # Using your custom font
+        title_text = title_font.render("Deceit", True, (255, 255, 255))
+        title_rect = title_text.get_rect(centerx=screen.get_width() // 2, top=50)
+        screen.blit(title_text, title_rect)
+
+        # Draw each button bigger and without table texture
+        button_height = 80  # Increased button height
+        for border_rect, (button_rect, text) in zip(menu.button_borders, menu.buttons):
+            # Increase button size
+            button_rect.height = button_height
+            border_rect.height = button_height + 4
+            
+            # Draw text with larger font
+            DrawUtils._draw_menu_text(screen, text, button_rect, menu.font, size=40)
+
+    @staticmethod
+    def _draw_menu_text(screen, text, button, font, size=50):  # Increased size from 40 to 50
+        """Helper method to draw text on menu buttons with specified size"""
+        letter_spacing = 10  # Adjust this value to increase/decrease spacing
+
+        # Calculate total width with spacing to center properly
+        total_width = 0
+        letter_surfaces = []
+        for char in text:
+            letter_surface = font.render(char, True, (255, 0, 0))  # Changed to red (255, 0, 0)
+            letter_surfaces.append(letter_surface)
+            total_width += letter_surface.get_width() + letter_spacing
+        total_width -= letter_spacing  # Remove extra spacing after last letter
+
+        # Calculate starting x position to center the text
+        start_x = button.centerx - (total_width // 2)
+        y = button.centery - letter_surfaces[0].get_height() // 2
+
+        # Draw each letter with spacing
+        current_x = start_x
+        for letter_surface in letter_surfaces:
+            screen.blit(letter_surface, (current_x, y))
+            current_x += letter_surface.get_width() + letter_spacing
 
     @staticmethod
     def _draw_center_x(screen):
@@ -185,10 +239,9 @@ class DrawUtils:
         """Draw the mute button with speaker icon and volume message"""
         # Draw button background with gray box
         button_bg_rect = pygame.Rect(game.mute_button_rect)
-
         button_bg_rect.inflate_ip(700, 10)
 
-        pygame.draw.rect(screen, (200, 200,200, 100), button_bg_rect)
+        pygame.draw.rect(screen, (200, 200, 200, 100), button_bg_rect)
         pygame.draw.rect(screen, (180, 20, 20), button_bg_rect, width=2)
         pygame.draw.rect(screen, (30, 30, 30), game.mute_button_rect, border_radius=10)
 

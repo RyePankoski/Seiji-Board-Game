@@ -12,12 +12,11 @@ from network_manager import NetworkManager
 # Initialize Pygame
 pygame.init()
 
-
 class MenuScreen:
     def __init__(self):
         try:
-            self.font = pygame.font.Font('Fonts/font.otf', 42)
-            self.title_font = pygame.font.Font('Fonts/font.otf', 72)
+            self.font = pygame.font.Font('Fonts/font.otf', 60)
+            self.title_font = pygame.font.Font('Fonts/font.otf', 90)
         except pygame.error:
             print("Custom font not found, using default")
             self.font = pygame.font.Font(None, 42)
@@ -44,9 +43,9 @@ class MenuScreen:
 
         # Create buttons with their borders
         button_positions = [
-            ("SinglePlayer", start_y),
-            ("Multiplayer", start_y + button_height + button_spacing),
-            ("Quit", start_y + 2 * (button_height + button_spacing))
+            ("Alone", start_y),
+            ("Amidst", start_y + button_height + button_spacing),
+            ("Abandon", start_y + 2 * (button_height + button_spacing))
         ]
 
         for text, y_pos in button_positions:
@@ -69,17 +68,16 @@ class MenuScreen:
             self.button_borders.append(border_rect)
             self.buttons.append((button_rect, text))
 
+    def handle_click(self, mouse_x, mouse_y):
+        """Handle menu button clicks"""
+        for button_rect, text in self.buttons:
+            if button_rect.collidepoint(mouse_x, mouse_y):
+                return text  # Return the exact text without modification
+        return None
+
     def draw(self, screen):
         """Draw the menu using DrawUtils"""
         DrawUtils.draw_menu(screen, self)
-
-    def handle_click(self, mouse_x, mouse_y):
-        for button_rect, text in self.buttons:
-            if button_rect.collidepoint(mouse_x, mouse_y):
-                if text.lower() == "stone":
-                    return "singleplayer"
-                return text.lower()
-        return None
 
 
 def fade_transition(screen):
@@ -547,9 +545,9 @@ class Game:
                 reserve_to_edit[2].pop()
 
             self.add_to_log(
-                f"Player {self.board[row][col].owner} placed {self.board[row][col].name} at: {col + 1},{13 - row}")
-
+            f"Player {self.board[row][col].owner} placed {self.board[row][col].name} at: {col + 1},{13 - row}")
             self.place_sound.play()
+            return True
 
     def place_monarch(self, row, col):
         king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
@@ -718,7 +716,7 @@ def main():
                     mouse_x, mouse_y = pygame.mouse.get_pos()
                     action = menu.handle_click(mouse_x, mouse_y)
 
-                    if action == "singleplayer":
+                    if action == "Alone":
                         fade_transition(screen)
 
                         try:
@@ -730,7 +728,7 @@ def main():
 
                         game.multiplayer = False
                         current_state = GameState.PLAYING
-                    elif action == "multiplayer":
+                    elif action == "Amidst":
                         fade_transition(screen)
 
                         try:
@@ -742,9 +740,9 @@ def main():
 
                         game.multiplayer = True
 
-                        game.connect_to_server(input("Enter IP "))
+                        game.connect_to_server(input("Enter IP: "))
                         current_state = GameState.PLAYING
-                    elif action == "quit":
+                    elif action == "Abandon":
                         pygame.quit()
                         sys.exit()
 
