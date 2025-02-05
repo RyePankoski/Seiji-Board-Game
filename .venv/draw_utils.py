@@ -126,10 +126,6 @@ class DrawUtils:
         # Draw mute button and game info
         DrawUtils._draw_mute_button(game, screen)
         DrawUtils._draw_game_info(game, screen)
-        game.draw_message_log(screen)
-
-
-
 
     @staticmethod
     def draw_menu(screen, menu):
@@ -192,6 +188,55 @@ class DrawUtils:
             if hasattr(menu, 'ip_input'):
                 text = font.render(menu.ip_input, True, (255, 255, 255))
                 screen.blit(text, (input_box.x + 5, input_box.y + 10))
+
+    def draw_message_log(self, screen):
+        """Draw the message log in the bottom right corner with scrolling"""
+        # Draw semi-transparent background
+        log_surface = pygame.Surface((self.log_rect.width, self.log_rect.height))
+        log_surface.fill((30, 30, 30))
+        log_surface.set_alpha(200)
+        screen.blit(log_surface, self.log_rect)
+
+        # Draw border
+        pygame.draw.rect(screen, (100, 100, 100), self.log_rect, 2)
+
+        # Get the most recent messages (reverse the list)
+        messages_to_display = list(reversed(self.message_log))
+
+        # Draw messages from bottom up
+        current_y = self.log_rect.bottom - 30  # Start from bottom, with padding
+
+        for message in messages_to_display:
+            text_surface = self.log_font.render(message, True, (255, 255, 255))
+
+            # If we've moved above the top of the box, stop drawing
+            if current_y < self.log_rect.top:
+                break
+
+            if text_surface.get_width() > self.log_rect.width - 10:
+                # Handle word wrapping
+                words = message.split()
+                lines = []
+                current_line = words[0]
+
+                for word in words[1:]:
+                    test_line = current_line + " " + word
+                    test_surface = self.log_font.render(test_line, True, (255, 255, 255))
+                    if test_surface.get_width() <= self.log_rect.width - 10:
+                        current_line = test_line
+                    else:
+                        lines.append(current_line)
+                        current_line = word
+                lines.append(current_line)
+
+                # Draw wrapped lines from bottom up
+                for line in reversed(lines):
+                    text_surface = self.log_font.render(line, True, (255, 255, 255))
+                    screen.blit(text_surface, (self.log_rect.x + 5, current_y))
+                    current_y -= 25
+            else:
+                screen.blit(text_surface, (self.log_rect.x + 5, current_y))
+                current_y -= 25
 
     @staticmethod
     def _draw_menu_text(screen, text, button, font, size=50):  # Increased size from 40 to 50

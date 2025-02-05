@@ -13,16 +13,7 @@ class NetworkManager:
         self.connected = False
 
     def connect_to_server(self, server_ip: str = "localhost", port: int = 5555) -> bool:
-        """
-        Establishes connection to the game server
 
-        Args:
-            server_ip: IP address of the server
-            port: Port number to connect to
-
-        Returns:
-            bool: True if connection was successful, False otherwise
-        """
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.socket.connect((server_ip, port))
@@ -51,15 +42,6 @@ class NetworkManager:
                 break
 
     def send_game_state(self, game_state: Dict[str, Any]) -> bool:
-        """
-        Sends the current game state to the server
-
-        Args:
-            game_state: Dictionary containing the current game state
-
-        Returns:
-            bool: True if sending was successful, False otherwise
-        """
         if not self.connected:
             return False
 
@@ -74,12 +56,6 @@ class NetworkManager:
             return False
 
     def process_network_updates(self, update_callback) -> None:
-        """
-        Processes any pending network updates
-
-        Args:
-            update_callback: Function to call with new game state when updates are received
-        """
         try:
             while not self.update_queue.empty():
                 new_state = self.update_queue.get_nowait()
@@ -89,7 +65,6 @@ class NetworkManager:
             pass
 
     def disconnect(self) -> None:
-        """Closes the network connection"""
         self.connected = False
         if self.socket:
             try:
