@@ -214,7 +214,6 @@ class Game:
                         owner=cell["owner"],
                         promoted=cell["promoted"]
                     )
-                    piece.promote_sound_played = cell["promote_sound_played"]
                     board_row.append(piece)
             board.append(board_row)
 
