@@ -457,7 +457,7 @@ class Game:
             return
 
         # Handle initial promotions for unpromoted pieces
-        if piece.name == "Monarch" and adj_pieces:
+        if piece.name == "Monarch" and adj_pieces and adj_pieces != {"Palace"}:
             if not piece.promoted:
                 self.promote(piece, move_distance=2)
 
