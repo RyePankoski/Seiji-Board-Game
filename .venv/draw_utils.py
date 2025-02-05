@@ -126,6 +126,10 @@ class DrawUtils:
         # Draw mute button and game info
         DrawUtils._draw_mute_button(game, screen)
         DrawUtils._draw_game_info(game, screen)
+        game.draw_message_log(screen)
+
+
+
 
     @staticmethod
     def draw_menu(screen, menu):

@@ -132,7 +132,7 @@ class Game:
         self.capture = pygame.mixer.Sound("Sounds/capture.mp3")
         self.promote_sound = pygame.mixer.Sound("Sounds/promote.mp3")
         self.endgame = pygame.mixer.Sound("Sounds/endgame.mp3")
-        self.advisor = pygame.mixer.Sound("Sounds/advisor.mp3")
+        self.select_piece = pygame.mixer.Sound("Sounds/advisor.mp3")
         self.de_select = pygame.mixer.Sound("Sounds/de-select.mp3")
 
         self.is_muted = False
@@ -257,27 +257,24 @@ class Game:
     def get_valid_moves(self, row, col):
         """Get valid moves based on piece type."""
         moves = []
-        moving_piece = self.board[row][col]
-        player = moving_piece.owner
+        piece = self.board[row][col]
+        player = piece.owner
 
-        for dx, dy in moving_piece.directions:
-            for distance in range(1, moving_piece.move_distance + 1):
-                new_row, new_col = row + dx * distance, col + dy * distance
+        for dx, dy in piece.directions:
+            for dist in range(1, piece.move_distance + 1):
+                new_row, new_col = row + dx * dist, col + dy * dist
 
                 if not (0 <= new_row < BOARD_SIZE and 0 <= new_col < BOARD_SIZE):
-                    break  # Stop if we go off the board
+                    break  # Off the board
 
-                target_square = self.board[new_row][new_col]
+                target = self.board[new_row][new_col]
 
-                if target_square == EMPTY:
+                if target == EMPTY:
                     moves.append((new_row, new_col))
-                elif self.is_enemy_piece(target_square, player):
-                    if moving_piece.name != "Advisor" or moving_piece.promoted:
-                        moves.append((new_row, new_col))  # Allow attack
-                    break  # Stop after hitting any piece
                 else:
-                    break  # Stop if we hit our own piece
-
+                    if self.is_enemy_piece(target, player) and (piece.name != "Advisor" or piece.promoted):
+                        moves.append((new_row, new_col))  # Attack allowed
+                    break  # Stop after hitting any piece
         return moves
 
     def get_valid_placement_squares(self):
@@ -287,22 +284,15 @@ class Game:
             for col in range(BOARD_SIZE):
                 piece = self.board[row][col]
 
-                # Skip empty or opponent's pieces
                 if piece == EMPTY or piece.owner != self.current_player:
                     continue
 
-                area_size = PALACE_AREA  # You can change this value to any other number
-
                 if piece.name == "Palace":
-                    # Mark the area around the Palace (from row - (area_size // 2) to row + (area_size // 2), col - (area_size // 2) to col + (area_size // 2))
-                    for i in range(row - (area_size // 2), row + (area_size // 2) + 1):
-                        for j in range(col - (area_size // 2), col + (area_size // 2) + 1):
-                            # Make sure the indices are within board bounds
-                            if 0 <= i < BOARD_SIZE and 0 <= j < BOARD_SIZE:
-                                valid_squares.add((i, j))
-
+                    half_area = PALACE_AREA // 2
+                    for i in range(max(0, row - half_area), min(BOARD_SIZE, row + half_area + 1)):
+                        for j in range(max(0, col - half_area), min(BOARD_SIZE, col + half_area + 1)):
+                            valid_squares.add((i, j))
                 else:
-                    # Get valid moves for non-Palace pieces
                     valid_squares.update(self.get_valid_moves(row, col))
 
         return valid_squares
@@ -310,7 +300,6 @@ class Game:
     def demote(self, row, col):
         piece_to_demote = self.board[row][col]
         piece_to_demote.promoted = False
-        piece_to_demote.advisor_next_advisor = False
 
         demotion_settings = {
             "Official": ([(1, 0), (0, 1), (-1, 0), (0, -1)], 1),
@@ -331,78 +320,60 @@ class Game:
                 piece.directions = new_directions  # Set directions directly
 
     def handle_promotion_status(self, row, col):
-        promoting_piece = self.board[row][col]
-        adjacent_pieces = self.has_friendly_adjacent_pieces(row, col)
+        piece = self.board[row][col]
+        adj_pieces = self.has_friendly_adjacent_pieces(row, col)
+        name = piece.name
 
-        if promoting_piece.name == "Monarch" and not adjacent_pieces:
+        # Demotion conditions
+        if (
+                (name == "Monarch" and not adj_pieces) or
+                (name == "Advisor" and "Monarch" not in adj_pieces) or
+                (name == "Official" and not {"Monarch", "Advisor"} & adj_pieces) or
+                (not adj_pieces or adj_pieces == {"Palace"})
+        ):
             self.demote(row, col)
-        if promoting_piece.name == "Advisor" and "Monarch" not in adjacent_pieces:
-            self.demote(row, col)
-        if promoting_piece.name == "Official" and "Monarch" not in adjacent_pieces and "Advisor" not in adjacent_pieces:
-            self.demote(row, col)
-
-        if not adjacent_pieces or adjacent_pieces == {"Palace"}:
-            self.demote(row, col)
-            self.advisor_next_advisor = False
             return
 
-        name = promoting_piece.name
-
+        # Promotion conditions
         if name == "Monarch":
-            if adjacent_pieces:
-                self.promote(promoting_piece, move_distance=2)
+            self.promote(piece, move_distance=2)
 
-        elif name == "Advisor":
-            if "Monarch" in adjacent_pieces:
-                self.promote(promoting_piece, 2,
-                             new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0),
-                                             (0, -1)])
+        elif name == "Advisor" and "Monarch" in adj_pieces:
+            self.promote(piece, 2,
+                         new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0), (0, -1)])
+
         elif name == "Official":
-            if "Monarch" in adjacent_pieces:
-                self.promote(promoting_piece, 1,
+            if "Monarch" in adj_pieces:
+                self.promote(piece, 1,
                              new_directions=[(1, 1), (1, -1), (-1, -1), (-1, 1), (1, 0), (0, 1), (-1, 0), (0, -1)])
-            elif "Advisor" in adjacent_pieces:
-                self.promote(promoting_piece, move_distance=2)
+            elif "Advisor" in adj_pieces:
+                self.promote(piece, move_distance=2)
 
     def check_board_promotions(self):
         for row in range(BOARD_SIZE):
             for col in range(BOARD_SIZE):
                 piece = self.board[row][col]
                 if piece != EMPTY:
-                    action = self.handle_promotion_status if self.has_friendly_adjacent_pieces(row,
-                                                                                               col) else self.demote
-                    action(row, col)
+                    (self.handle_promotion_status if self.has_friendly_adjacent_pieces(row, col) else self.demote)(row,
+                                                                                                                   col)
 
     def did_someone_win(self):
-
-        # Skip if game is in king placement phase
         if self.monarch_placement_phase:
             return False
 
-        # Initialize monarch counters for each player
         monarchs = {PLAYER_1: False, PLAYER_2: False}
 
-        # Scan the board for monarchs
         for row in self.board:
             for piece in row:
                 if piece != EMPTY and piece.name == "Monarch":
                     monarchs[piece.owner] = True
 
-        # Check if either monarch is missing
-        if not monarchs[PLAYER_1]:
-
-            self.game_over = True
-            self.winner = PLAYER_2
-            if not self.is_muted:
-                self.endgame.play()
-            return True
-
-        if not monarchs[PLAYER_2]:
-            self.game_over = True
-            self.winner = PLAYER_1
-            if not self.is_muted:
-                self.endgame.play()
-            return True
+        for player, opponent in [(PLAYER_1, PLAYER_2), (PLAYER_2, PLAYER_1)]:
+            if not monarchs[player]:
+                self.game_over, self.winner = True, opponent
+                if not self.is_muted:
+                    self.endgame.play()
+                return True
 
         return False
 
@@ -411,44 +382,33 @@ class Game:
         from_row, from_col = from_pos
         to_row, to_col = to_pos
 
-        # Get the moving piece and the target square
-        moving_piece = self.board[from_row][from_col]
-        target_square = self.board[to_row][to_col]
-        current_player = moving_piece.owner
+        piece = self.board[from_row][from_col]
+        target = self.board[to_row][to_col]
+        player = piece.owner
+        enemy = PLAYER_2 if player == PLAYER_1 else PLAYER_1
+        reserve = self.player1_reserve if player == PLAYER_1 else self.player2_reserve
 
-        # Determine enemy player and reserve to update
-        enemy_player = PLAYER_2 if current_player == PLAYER_1 else PLAYER_1
-        reserve_to_edit = self.player1_reserve if current_player == PLAYER_1 else self.player2_reserve
-
-        just_captured = False
-
-        # Check if the target square contains an enemy piece
-        if target_square != EMPTY and target_square.owner == enemy_player:
-            captured_piece_name = target_square.name
+        # Handle capture
+        if target != EMPTY and target.owner == enemy:
+            if target.name != "Palace":
+                reserve[0 if target.name == "Advisor" else 1].append(target.name)
+                self.pieces_in_hand[player] += 1
             self.capture.play()
-            # Add captured piece to the current player's reserve
-            piece_reserve = reserve_to_edit[0] if captured_piece_name == "Advisor" else reserve_to_edit[1]
-            if captured_piece_name != "Palace":
-                piece_reserve.append(captured_piece_name)
-            self.pieces_in_hand[current_player] += 1
-            self.add_to_log(f"Player {current_player} captured {captured_piece_name} at {to_row},{to_col} ")
-            just_captured = True
+            action = f"captured {target.name} at {to_col + 1},{13 - to_row}"
+        else:
+            action = f"moved {piece.name} to: {to_col + 1},{13 - to_row}"
 
-        if just_captured != True:
-            self.add_to_log(f"Player {moving_piece.owner} moved {moving_piece.name} to: {to_col + 1},{13 - (to_row)}")
+        self.add_to_log(f"Player {player} {action}")
 
-        self.board[to_row][to_col] = moving_piece
-        self.board[from_row][from_col] = EMPTY
+        # Update board and check win condition
+        self.board[to_row][to_col], self.board[from_row][from_col] = piece, EMPTY
         self.did_someone_win()
 
     def check_reserve_click(self, mouse_x, mouse_y):
-        # Calculate reserve area boundaries
         reserve_start_x = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + CELL_SIZE
-        piece_spacing = CELL_SIZE * 0.8
-        padding = piece_spacing * 0.5
+        piece_spacing, padding = CELL_SIZE * 0.8, CELL_SIZE * 0.4
         max_pieces_per_row = 4
 
-        # Reserve area boundaries for both players
         reserve_areas = {
             PLAYER_1: (60, WINDOW_HEIGHT // 2, self.player1_reserve),
             PLAYER_2: (WINDOW_HEIGHT // 2 - 60, WINDOW_HEIGHT - 60, self.player2_reserve)
@@ -457,45 +417,37 @@ class Game:
         if mouse_x < reserve_start_x:
             return False
 
-        # Helper function to process reserve click
-        def process_reserve_click(start_y, end_y, reserve):
-            if start_y <= mouse_y <= end_y:
-                current_y = start_y + padding
-                col = int((mouse_x - (reserve_start_x + padding)) // piece_spacing)
-
-                # Find which section was clicked
-                for section_idx, section in enumerate(reserve):
-                    num_pieces = len(section)
-                    rows_needed = (num_pieces + max_pieces_per_row - 1) // max_pieces_per_row
-                    section_height = rows_needed * piece_spacing + padding
-
-                    if current_y <= mouse_y < current_y + section_height:
-                        # Calculate row within this section
-                        relative_y = mouse_y - current_y
-                        row = int(relative_y // piece_spacing)
-
-                        # Calculate piece index and verify it exists
-                        piece_idx = (row * max_pieces_per_row) + col
-                        if 0 <= col < max_pieces_per_row and piece_idx < len(section):
-                            self.selected_reserve_piece = {
-                                'player': self.current_player,
-                                'section': section_idx,
-                                'piece_type': section[piece_idx],
-                                'row': row,
-                                'col': col
-                            }
-                            return True
-
-                    current_y += section_height
-
+        def process_click(start_y, end_y, reserve):
+            if not (start_y <= mouse_y <= end_y):
                 return False
 
-        # Check current player's reserve area
-        if self.current_player in reserve_areas:
-            start_y, end_y, reserve = reserve_areas[self.current_player]
-            if process_reserve_click(start_y, end_y, reserve):
-                self.pick_up.play()
-                return True
+            self.deselect()
+            col = int((mouse_x - (reserve_start_x + padding)) // piece_spacing)
+            current_y = start_y + padding
+
+            for section_idx, section in enumerate(reserve):
+                section_height = ((
+                                              len(section) + max_pieces_per_row - 1) // max_pieces_per_row) * piece_spacing + padding
+                if current_y <= mouse_y < current_y + section_height:
+                    row = int((mouse_y - current_y) // piece_spacing)
+                    piece_idx = row * max_pieces_per_row + col
+
+                    if 0 <= col < max_pieces_per_row and piece_idx < len(section):
+                        self.selected_reserve_piece = {
+                            'player': self.current_player,
+                            'section': section_idx,
+                            'piece_type': section[piece_idx],
+                            'row': row,
+                            'col': col
+                        }
+                        return True
+                current_y += section_height
+            return False
+
+        start_y, end_y, reserve = reserve_areas.get(self.current_player, (0, 0, []))
+        if process_click(start_y, end_y, reserve):
+            self.pick_up.play()
+            return True
 
         self.selected_reserve_piece = None
         return False
@@ -508,46 +460,39 @@ class Game:
 
     def place_new_piece(self, row, col):
 
-        if self.current_player == PLAYER_1:
-            reserve_to_edit = self.player1_reserve
-        else:
-            reserve_to_edit = self.player2_reserve
+        if (row, col) not in self.get_valid_placement_squares():
+            return False
 
-        piece_from_reserve = self.selected_reserve_piece
+        # Define piece configurations in a dictionary
+        piece_configs = {
+            "Official": ([(1, 0), (0, 1), (-1, 0), (0, -1)], 1, 1),
+            "Advisor": ([(1, 1), (1, -1), (-1, -1), (-1, 1)], 3, 0),
+            "Palace": ([], 0, 2)
+        }
 
-        if piece_from_reserve['piece_type'] == "Official":
-            piece_to_place = Piece("Official", [(1, 0), (0, 1), (-1, 0), (0, -1)], 1, self.current_player,
-                                   False)
-        elif piece_from_reserve['piece_type'] == "Advisor":
-            piece_to_place = Piece("Advisor", [(1, 1), (1, -1), (-1, -1), (-1, 1)], 3, self.current_player,
-                                   False)
-        elif piece_from_reserve['piece_type'] == "Palace":
-            piece_to_place = Piece("Palace", [], 0, self.current_player, False)
+        piece_type = self.selected_reserve_piece['piece_type']
+        moves, value, reserve_index = piece_configs[piece_type]
 
-        valid_placements = self.get_valid_placement_squares()
+        # Create and place the piece
+        piece_to_place = Piece(piece_type, moves, value, self.current_player, False)
+        self.board[row][col] = piece_to_place
 
-        if (row, col) in valid_placements:
-            self.reserve_selected = False
-            self.board[row][col] = piece_to_place
-            self.check_board_promotions()
+        # Update game state
+        reserve = self.player1_reserve if self.current_player == PLAYER_1 else self.player2_reserve
+        reserve[reserve_index].pop()
 
-            self.pieces_in_hand[self.current_player] -= 1
-            self.selected_piece = None
-            self.valid_moves = []
-            self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
+        self.reserve_selected = False
+        self.check_board_promotions()
+        self.pieces_in_hand[self.current_player] -= 1
+        self.selected_piece = None
+        self.valid_moves = []
+        self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
 
-            # Update reserves based on the piece placed
-            if piece_from_reserve['piece_type'] == "Advisor":
-                reserve_to_edit[0].pop()  # Removes and returns the last advisor
-            if piece_from_reserve['piece_type'] == "Official":
-                reserve_to_edit[1].pop()  # Removes and returns the last official
-            if piece_from_reserve['piece_type'] == "Palace":
-                reserve_to_edit[2].pop()
+        # Log and sound
+        self.add_to_log(f"Player {self.board[row][col].owner} placed {piece_type} at: {col + 1},{13 - row}")
+        self.place_sound.play()
 
-            self.add_to_log(
-            f"Player {self.board[row][col].owner} placed {self.board[row][col].name} at: {col + 1},{13 - row}")
-            self.place_sound.play()
-            return True
+        return True
 
     def place_monarch(self, row, col):
         king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
@@ -562,46 +507,44 @@ class Game:
         if self.game_over:
             return
 
-        # King placement phase
         if self.is_king_placement_phase():
-            if self.board[row][col] == EMPTY:  # Added center area check
+            if self.board[row][col] == EMPTY:
                 self.place_monarch(row, col)
                 self.finish_move()
             return
 
-        # First priority: If we have a piece selected, handle movement or deselection
+        piece = self.board[row][col]
+
+        # Handle movement if a piece is selected
         if self.selected_piece:
             if (row, col) in self.valid_moves:
                 self.move_piece(self.selected_piece, (row, col))
                 self.check_board_promotions()
-                self.selected_piece = None
-                self.valid_moves = []
+                self.selected_piece, self.valid_moves = None, []
 
-                if not self.game_over:  # Only switch players if game isn't over
+                if not self.game_over:
                     self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
 
                 self.slide_sound.play()
                 self.finish_move()
-            else:  # Clicking anywhere invalid with a piece selected should deselect
+            else:
                 self.deselect()
-                return
 
-        # Second priority: If clicking own piece (regular or king), select it
-        elif self.board[row][col] != EMPTY and self.board[row][col].owner == self.current_player:
+        # Select own piece
+        elif piece != EMPTY and piece.owner == self.current_player:
             self.selected_piece = (row, col)
             self.valid_moves = self.get_valid_moves(row, col)
-            self.advisor.play()
+            self.select_piece.play()
 
-        # Third priority: If reserve is selected, try to place a new piece or deselect
+        # Place new piece from reserve
         elif self.reserve_selected:
-            success = self.place_new_piece(row, col)
-            self.finish_move()
-            if not success:
-                self.deselect()
+            if self.place_new_piece(row, col):
+                self.finish_move()
+            else:
                 self.de_select.play()
+            self.deselect()
 
     def finish_move(self):
-        """Called after a move is completed to handle multiplayer synchronization"""
         if self.multiplayer:
             self.send_game_state()
 
