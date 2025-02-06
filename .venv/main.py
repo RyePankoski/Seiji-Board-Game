@@ -11,12 +11,8 @@ import queue
 import threading
 from piece import Piece
 from UI import PostGameScreen
-
-
 # Initialize Pygame
 pygame.init()
-
-
 class Game:
     def __init__(self):
         self.board = [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
@@ -152,6 +148,7 @@ class Game:
             self.monarch_placement_phase = False
 
         return monarch_count < 2
+        
 
     def did_someone_win(self):
         if self.monarch_placement_phase:

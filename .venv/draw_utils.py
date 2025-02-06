@@ -34,7 +34,7 @@ class StarPoint:
         self.size = 0.5 + (distance / 400)  # Adjust 400 to control growth rate
         self.size = min(2.5, self.size)  # Cap maximum size
 
-    def is_off_screen(self, width, height):
+    def is_off_screen(self, width, heightb                                 ):
         return (self.position[0] < 0 or self.position[0] > width or
                 self.position[1] < 0 or self.position[1] > height)
 
@@ -181,7 +181,7 @@ class DrawUtils:
 
         # Draw title "Deceit" at the top
         title_font = pygame.font.Font("Fonts/general_text.ttf", 100)  # Using your custom font
-        title_text = title_font.render("DECEIT", True, (255, 255, 255))
+        title_text = title_font.render("Seiji ", True, (255, 255, 255))
         title_rect = title_text.get_rect(centerx=screen.get_width() // 2, top=50)
         screen.blit(title_text, title_rect)
 
