@@ -28,11 +28,14 @@ class NetworkManager:
 
     def send_game_state(self, board: list, current_player: int,
                         player1_reserve: list, player2_reserve: list,
-                        most_recent_message: str) -> bool:
+                        most_recent_message: str, kings_placed: dict,
+                        monarch_placement_phase: bool,
+                        game_over: bool = False,  # Add these new parameters
+                        winner: int = None) -> bool:
         if not self.connected:
             return False
 
-        # Create serializable game state
+        # Create serializable board state
         serializable_board = []
         for row in board:
             board_row = []
@@ -54,7 +57,11 @@ class NetworkManager:
             "current_player": current_player,
             "player_1_reserve": player1_reserve,
             "player_2_reserve": player2_reserve,
-            "most_recent_message": most_recent_message
+            "most_recent_message": most_recent_message,
+            "kings_placed": {str(k): v for k, v in kings_placed.items()},
+            "monarch_placement_phase": monarch_placement_phase,
+            "game_over": game_over,  # Add these new fields
+            "winner": winner
         }
 
         try:
@@ -67,16 +74,7 @@ class NetworkManager:
             self.connected = False
             return False
 
-    def process_network_updates(self, game) -> None:
-        """Process any pending network updates and apply them to the game state"""
-        try:
-            while not self.update_queue.empty():
-                new_state = self.update_queue.get_nowait()
-                with self.lock:
-                    self.update_game_state(game, new_state)
-        except queue.Empty:
-            pass
-
+    # Update the update_game_state method:
     def update_game_state(self, game, new_state: Dict) -> None:
         """Updates the game state with data received from network"""
         # Convert the serialized board back to Piece objects
@@ -103,7 +101,28 @@ class NetworkManager:
         game.player2_reserve = new_state["player_2_reserve"]
         game.add_to_log(new_state["most_recent_message"])
 
+        # Convert string keys back to integers for kings_placed
+        game.kings_placed = {int(k): v for k, v in new_state["kings_placed"].items()}
+        game.monarch_placement_phase = new_state["monarch_placement_phase"]
+
+        # Update game over state and winner
+        game.game_over = new_state.get("game_over", False)
+        game.winner = new_state.get("winner", None)
+
+        game.is_king_placement_phase()
         game.did_someone_win()
+
+    def process_network_updates(self, game) -> None:
+        """Process any pending network updates and apply them to the game state"""
+        try:
+            while not self.update_queue.empty():
+                new_state = self.update_queue.get_nowait()
+                with self.lock:
+                    self.update_game_state(game, new_state)
+        except queue.Empty:
+            pass
+
+
 
     def _network_thread(self) -> None:
         while self.connected:

@@ -86,7 +86,11 @@ class Game:
                 self.current_player,
                 self.player1_reserve,
                 self.player2_reserve,
-                self.most_recent_message
+                self.most_recent_message,
+                self.kings_placed,
+                self.monarch_placement_phase,
+                self.game_over,  # Add these new parameters
+                self.winner
             )
 
     def reset_game(self):
@@ -125,6 +129,8 @@ class Game:
             self.winner = PLAYER_2 if self.current_player == PLAYER_1 else PLAYER_1
             if not self.is_muted:
                 self.endgame.play()
+            # Add a message to the log about the resignation
+            self.add_to_log(f"Player {self.current_player} has resigned. Player {self.winner} wins!")
             self.send_game_state()
 
     def process_network_updates(self):
@@ -145,6 +151,7 @@ class Game:
             self.monarch_placement_phase = False
 
         return not all(self.kings_placed.values())
+
 
     def place_monarch(self, row, col):
         king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
