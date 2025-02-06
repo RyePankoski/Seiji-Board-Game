@@ -34,7 +34,7 @@ class StarPoint:
         self.size = 0.5 + (distance / 400)  # Adjust 400 to control growth rate
         self.size = min(2.5, self.size)  # Cap maximum size
 
-    def is_off_screen(self, width, heightb                                 ):
+    def is_off_screen(self, width, height):
         return (self.position[0] < 0 or self.position[0] > width or
                 self.position[1] < 0 or self.position[1] > height)
 

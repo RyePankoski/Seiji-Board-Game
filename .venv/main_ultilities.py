@@ -5,6 +5,7 @@ from game_state import GameState
 from constants import WINDOW_WIDTH, WINDOW_HEIGHT
 
 
+
 class MainUtilities:
     def __init__(self):
         self.sounds = {}
@@ -39,13 +40,31 @@ class MainUtilities:
             print(f"Could not load or play music file: {e}")
 
     def handle_volume_control(self, event):
-        """Handle volume up/down controls"""
+        """Handle volume up/down controls with arrow keys"""
+        current_volume = mixer.music.get_volume()
+
         if event.key == pygame.K_UP:
-            current_volume = mixer.music.get_volume()
-            mixer.music.set_volume(min(1.0, current_volume + 0.1))
+            new_volume = min(1.0, current_volume + 0.1)
         elif event.key == pygame.K_DOWN:
-            current_volume = mixer.music.get_volume()
-            mixer.music.set_volume(max(0.0, current_volume - 0.1))
+            new_volume = max(0.0, current_volume - 0.1)
+        else:
+            return
+
+        # Update music volume
+        mixer.music.set_volume(new_volume)
+
+        # Update all sound effect volumes
+        for sound in [
+            self.place_sound,
+            self.slide_sound,
+            self.pick_up,
+            self.capture,
+            self.promote_sound,
+            self.endgame,
+            self.select_piece,
+            self.de_select
+        ]:
+            sound.set_volume(new_volume) # Fixed min() to max() for downward adjustment
 
     def fade_to_black(self, screen, speed=5):
         """Create a fade to black transition effect"""

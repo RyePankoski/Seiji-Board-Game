@@ -11,70 +11,75 @@ import queue
 import threading
 from piece import Piece
 from UI import PostGameScreen
-# Initialize Pygame
+
 pygame.init()
 class Game:
     def __init__(self):
+        def initialize_assets():
+            self.place_sound = pygame.mixer.Sound("Sounds/place_sound.mp3")
+            self.slide_sound = pygame.mixer.Sound("Sounds/slide_sound.mp3")
+            self.pick_up = pygame.mixer.Sound("Sounds/pick_up.mp3")
+            self.capture = pygame.mixer.Sound("Sounds/capture.mp3")
+            self.promote_sound = pygame.mixer.Sound("Sounds/promote.mp3")
+            self.endgame = pygame.mixer.Sound("Sounds/endgame.mp3")
+            self.select_piece = pygame.mixer.Sound("Sounds/advisor.mp3")
+            self.de_select = pygame.mixer.Sound("Sounds/de-select.mp3")
+            self.background = pygame.image.load("Textures/background.png")
+            self.background = pygame.transform.scale(self.background, (BOARD_SIZE * CELL_SIZE, BOARD_SIZE * CELL_SIZE))
+            self.background_2 = pygame.image.load("Textures/background_2.png")
+            self.background_2 = pygame.transform.scale(self.background_2, (WINDOW_WIDTH, WINDOW_HEIGHT))
+            self.table_texture = pygame.image.load("Textures/tables.png").convert_alpha()
+
+        initialize_assets()
+
+        # Game State & Core Mechanics
         self.board = [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
         self.current_player = PLAYER_1
-        self.pieces_in_hand = {PLAYER_1: NUMBER_OF_PIECES, PLAYER_2: NUMBER_OF_PIECES}
+        self.game_over = False
+        self.winner = None
+        self.monarch_placement_phase = True
+        self.kings_placed = {PLAYER_1: False, PLAYER_2: False}
+
+        # Piece Selection & Movement
         self.selected_piece = None
         self.valid_moves = []
-        self.kings_placed = {PLAYER_1: False, PLAYER_2: False}
-        self.game_over = False  # Add this
-        self.winner = None  # Add this
         self.reserve_selected = False
         self.selected_reserve_piece = None
-        self.monarch_placement_phase = True
 
-        self.network_manager = NetworkManager()
-        self.multiplayer = False
-
-        self.place_sound = pygame.mixer.Sound("Sounds/place_sound.mp3")  # Replace with actual file path
-        self.slide_sound = pygame.mixer.Sound("Sounds/slide_sound.mp3")
-        self.pick_up = pygame.mixer.Sound("Sounds/pick_up.mp3")
-        self.capture = pygame.mixer.Sound("Sounds/capture.mp3")
-        self.promote_sound = pygame.mixer.Sound("Sounds/promote.mp3")
-        self.endgame = pygame.mixer.Sound("Sounds/endgame.mp3")
-        self.select_piece = pygame.mixer.Sound("Sounds/advisor.mp3")
-        self.de_select = pygame.mixer.Sound("Sounds/de-select.mp3")
-
-        self.is_muted = False
-        self.mute_button_rect = pygame.Rect(10, WINDOW_HEIGHT - 70, 60, 60)
-
-        self.background = pygame.image.load("Textures/background.png")
-        self.background = pygame.transform.scale(self.background, (BOARD_SIZE * CELL_SIZE, BOARD_SIZE * CELL_SIZE))
-        self.background_2 = pygame.image.load("Textures/background_2.png")
-        self.background_2 = pygame.transform.scale(self.background_2, (WINDOW_WIDTH, WINDOW_HEIGHT))
-        self.table_texture = pygame.image.load("Textures/tables.png").convert_alpha()
-
-        self.resign_button_rect = pygame.Rect(WINDOW_WIDTH - 120, 10, 100, 40)  # Top right corner
-        self.resign_hover = False
-
-        self.message_log = []
-        self.most_recent_message = None
-        self.max_messages = 10  # Maximum number of messages to show
-        self.log_font = pygame.font.Font(None, 24)  # Font for the log
-        self.log_rect = pygame.Rect(
-            WINDOW_WIDTH - 300,  # X position (300 pixels from right)
-            WINDOW_HEIGHT - 160,  # Y position (adjusted up since box is smaller)
-            280,  # Width of log box
-            140  # Height reduced to 70% of original (180 * 0.7 = 126)
-        )
-
+        # Player Reserves
         self.player1_reserve = [
-            ["Advisor"] * ADVISOR_NUMBER,  # First row: 2 advisors
+            ["Advisor"] * ADVISOR_NUMBER,
             ["Official"] * OFFICIAL_NUMBER,
             ["Palace"] * PALACE_NUMBER
         ]
         self.player2_reserve = [
-            ["Advisor"] * ADVISOR_NUMBER,  # First row: 2 advisors
+            ["Advisor"] * ADVISOR_NUMBER,
             ["Official"] * OFFICIAL_NUMBER,
             ["Palace"] * PALACE_NUMBER
         ]
 
-    def network_finish_move(self):
-        """Called at the end of each move to update network state"""
+        # Networking
+        self.network_manager = NetworkManager()
+        self.multiplayer = False
+
+        # UI Elements
+        self.mute_button_rect = pygame.Rect(10, WINDOW_HEIGHT - 70, 60, 60)
+        self.resign_button_rect = pygame.Rect(WINDOW_WIDTH - 120, 10, 100, 40)
+        self.resign_hover = False
+        self.is_muted = False
+
+        # Message Log
+        self.message_log = []
+        self.most_recent_message = None
+        self.max_messages = 10
+        self.log_font = pygame.font.Font(None, 24)
+        self.log_rect = pygame.Rect(
+            WINDOW_WIDTH - 300,
+            WINDOW_HEIGHT - 160,
+            280,
+            140)
+
+    def send_game_state(self):
         if self.multiplayer:
             self.network_manager.send_game_state(
                 self.board,
@@ -88,7 +93,6 @@ class Game:
         """Reset the game state for a new game"""
         self.board = [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
         self.current_player = PLAYER_1
-        self.pieces_in_hand = {PLAYER_1: NUMBER_OF_PIECES, PLAYER_2: NUMBER_OF_PIECES}
         self.selected_piece = None
         self.valid_moves = []
         self.kings_placed = {PLAYER_1: False, PLAYER_2: False}
@@ -119,10 +123,9 @@ class Game:
         if not self.game_over:
             self.game_over = True
             self.winner = PLAYER_2 if self.current_player == PLAYER_1 else PLAYER_1
-            self.add_to_log(f"Player {self.current_player} resigned")
             if not self.is_muted:
                 self.endgame.play()
-            self.network_finish_move()
+            self.send_game_state()
 
     def process_network_updates(self):
         """Process any pending network updates"""
@@ -137,32 +140,27 @@ class Game:
             self.message_log.pop(0)  # Remove oldest message if we exceed max
 
     def is_king_placement_phase(self):
-        """Check if we're still in the king placement phase by counting Monarchs on the board"""
-        monarch_count = sum(
-            1 for row in self.board
-            for piece in row
-            if piece != EMPTY and piece.name == "Monarch"
-        )
-
-        if monarch_count == 2:
+        """Check if we're still in the king placement phase using kings_placed tracking"""
+        if all(self.kings_placed.values()):
             self.monarch_placement_phase = False
 
-        return monarch_count < 2
-        
+        return not all(self.kings_placed.values())
+
+    def place_monarch(self, row, col):
+        king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
+                              1, self.current_player, False)
+        self.board[row][col] = king_to_place
+        self.kings_placed[self.current_player] = True
+        self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
+        self.place_sound.play()
+        self.add_to_log(f"Player {king_to_place.owner} placed Monarch at {col + 1},{BOARD_SIZE - row}")
 
     def did_someone_win(self):
         if self.monarch_placement_phase:
             return False
 
-        monarchs = {PLAYER_1: False, PLAYER_2: False}
-
-        for row in self.board:
-            for piece in row:
-                if piece != EMPTY and piece.name == "Monarch":
-                    monarchs[piece.owner] = True
-
         for player, opponent in [(PLAYER_1, PLAYER_2), (PLAYER_2, PLAYER_1)]:
-            if not monarchs[player]:
+            if not self.kings_placed[player]:
                 self.game_over, self.winner = True, opponent
                 if not self.is_muted:
                     self.endgame.play()
@@ -177,41 +175,69 @@ class Game:
             return False
 
     def has_friendly_adjacent_pieces(self, row, col):
+        """Return a set of names of friendly pieces adjacent to the given position."""
         piece = self.board[row][col]
         if piece == EMPTY:
             return set()
 
-        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # Up, Down, Left, Right
-        adjacent_pieces = {
-            self.board[new_row][new_col].name
-            for dx, dy in directions
-            if 0 <= (new_row := row + dx) < BOARD_SIZE and 0 <= (new_col := col + dy) < BOARD_SIZE
-               and (adjacent_piece := self.board[new_row][new_col]) != EMPTY
-               and adjacent_piece.owner == piece.owner
-        }
+        def is_in_bounds(r, c):
+            return 0 <= r < BOARD_SIZE and 0 <= c < BOARD_SIZE
+
+        def is_friendly_piece(target):
+            return target != EMPTY and target.owner == piece.owner
+
+        adjacent_pieces = set()
+        directions = [
+            (-1, 0),  # Up
+            (1, 0),  # Down
+            (0, -1),  # Left
+            (0, 1)  # Right
+        ]
+
+        for dx, dy in directions:
+            new_row = row + dx
+            new_col = col + dy
+
+            if not is_in_bounds(new_row, new_col):
+                continue
+
+            adjacent_piece = self.board[new_row][new_col]
+            if is_friendly_piece(adjacent_piece):
+                adjacent_pieces.add(adjacent_piece.name)
+
         return adjacent_pieces
 
-    def get_valid_moves(self, row, col):
+    def get_valid_movement_squares(self, row, col):
         """Get valid moves based on piece type."""
         moves = []
         piece = self.board[row][col]
         player = piece.owner
 
+        def is_in_bounds(r, c):
+            return 0 <= r < BOARD_SIZE and 0 <= c < BOARD_SIZE
+
+        def can_attack(target_piece, attacking_piece):
+            return (self.is_enemy_piece(target_piece, player) and
+                    (attacking_piece.name != "Advisor" or attacking_piece.promoted))
+
+        # Check each direction the piece can move
         for dx, dy in piece.directions:
+            # Check each distance up to the piece's maximum move distance
             for dist in range(1, piece.move_distance + 1):
                 new_row, new_col = row + dx * dist, col + dy * dist
 
-                if not (0 <= new_row < BOARD_SIZE and 0 <= new_col < BOARD_SIZE):
-                    break  # Off the board
+                if not is_in_bounds(new_row, new_col):
+                    break
 
                 target = self.board[new_row][new_col]
 
                 if target == EMPTY:
                     moves.append((new_row, new_col))
                 else:
-                    if self.is_enemy_piece(target, player) and (piece.name != "Advisor" or piece.promoted):
-                        moves.append((new_row, new_col))  # Attack allowed
-                    break  # Stop after hitting any piece
+                    if can_attack(target, piece):
+                        moves.append((new_row, new_col))
+                    break  # Stop checking this direction after hitting any piece
+
         return moves
 
     def get_valid_placement_squares(self):
@@ -230,48 +256,53 @@ class Game:
                         for j in range(max(0, col - half_area), min(BOARD_SIZE, col + half_area + 1)):
                             valid_squares.add((i, j))
                 else:
-                    valid_squares.update(self.get_valid_moves(row, col))
+                    valid_squares.update(self.get_valid_movement_squares(row, col))
 
         return valid_squares
 
-    def promote(self, piece, move_distance=0, new_directions=None):
-        was_promoted = piece.promoted
-
-        # Always update stats
-        piece.promoted = True
-        piece.move_distance = move_distance
-        if new_directions:
-            piece.directions = new_directions
-
-        # Only play sound for new promotions
-        if not was_promoted:
-            print(f"Promoting: {piece.name}")
-            self.promote_sound.play()
-
-    def demote(self, row, col):
-        if self.board[row][col] and self.board[row][col].promoted:
-            piece_to_demote = self.board[row][col]
-            piece_to_demote.promoted = False
-
-            demotion_settings = {
-                "Official": ([(1, 0), (0, 1), (-1, 0), (0, -1)], 1),
-                "Advisor": ([(1, 1), (1, -1), (-1, -1), (-1, 1)], 3),
-                "Monarch": ([(-1, 0), (1, 0), (0, -1), (0, 1),
-                             (-1, -1), (1, 1), (-1, 1), (1, -1)], 1)
-            }
-
-            if piece_to_demote.name in demotion_settings:
-                piece_to_demote.directions, piece_to_demote.move_distance = demotion_settings[piece_to_demote.name]
-
     def handle_piece_status(self, row, col):
-        """Handle all piece promotion/demotion logic including promotion type changes"""
         piece = self.board[row][col]
         if piece == EMPTY:
             return
 
         adj_pieces = self.has_friendly_adjacent_pieces(row, col)
 
-        # First check for demotion
+        # Define piece settings for both base and promoted states
+        piece_settings = {
+            "Official": {
+                "base": ([(1, 0), (0, 1), (-1, 0), (0, -1)], 1),
+                "with_monarch": ([
+                                     (1, 1), (1, -1), (-1, -1), (-1, 1),
+                                     (1, 0), (0, 1), (-1, 0), (0, -1)
+                                 ], 1),
+                "with_advisor": ([(1, 0), (0, 1), (-1, 0), (0, -1)], 2)
+            },
+            "Advisor": {
+                "base": ([(1, 1), (1, -1), (-1, -1), (-1, 1)], 3),
+                "with_monarch": ([
+                                     (1, 1), (1, -1), (-1, -1), (-1, 1),
+                                     (1, 0), (0, 1), (-1, 0), (0, -1)
+                                 ], 2)
+            },
+            "Monarch": {
+                "base": ([(-1, 0), (1, 0), (0, -1), (0, 1),
+                          (-1, -1), (1, 1), (-1, 1), (1, -1)], 1),
+                "promoted": ([(-1, 0), (1, 0), (0, -1), (0, 1),
+                              (-1, -1), (1, 1), (-1, 1), (1, -1)], 2)
+            }
+        }
+
+        def update_piece_stats(new_directions, new_distance, should_promote):
+            was_promoted = piece.promoted
+            piece.promoted = should_promote
+            piece.directions = new_directions
+            piece.move_distance = new_distance
+
+            if should_promote and not was_promoted:
+                print(f"Promoting: {piece.name}")
+                self.promote_sound.play()
+
+        # Check demotion conditions
         should_demote = (
                 not adj_pieces or
                 adj_pieces == {"Palace"} or
@@ -280,43 +311,28 @@ class Game:
                 (piece.name == "Official" and "Monarch" not in adj_pieces and "Advisor" not in adj_pieces)
         )
 
-        if should_demote and piece.promoted:
-            self.demote(row, col)
+        if should_demote:
+            if piece.promoted and piece.name in piece_settings:
+                base_directions, base_distance = piece_settings[piece.name]["base"]
+                update_piece_stats(base_directions, base_distance, False)
             return
 
-        # Special case for promoted Official
-        if piece.name == "Official" and piece.promoted:
+        # Handle promotions
+        if piece.name == "Official":
             if "Monarch" in adj_pieces:
-                # King promotion takes precedence
-                self.promote(piece, 1, new_directions=[
-                    (1, 1), (1, -1), (-1, -1), (-1, 1),
-                    (1, 0), (0, 1), (-1, 0), (0, -1)
-                ])
+                directions, distance = piece_settings["Official"]["with_monarch"]
+                update_piece_stats(directions, distance, True)
             elif "Advisor" in adj_pieces:
-                # Revert to Advisor promotion if King moved away but Advisor still adjacent
-                self.promote(piece, move_distance=2, new_directions=[(1, 0), (0, 1), (-1, 0), (0, -1)])
-            return
+                directions, distance = piece_settings["Official"]["with_advisor"]
+                update_piece_stats(directions, distance, True)
 
-        # Handle initial promotions for unpromoted pieces
-        if piece.name == "Monarch" and adj_pieces and adj_pieces != {"Palace"}:
-            if not piece.promoted:
-                self.promote(piece, move_distance=2)
+        elif piece.name == "Advisor" and "Monarch" in adj_pieces:
+            directions, distance = piece_settings["Advisor"]["with_monarch"]
+            update_piece_stats(directions, distance, True)
 
-        elif piece.name == "Advisor":
-            if "Monarch" in adj_pieces and not piece.promoted:
-                self.promote(piece, 2, new_directions=[
-                    (1, 1), (1, -1), (-1, -1), (-1, 1),
-                    (1, 0), (0, 1), (-1, 0), (0, -1)
-                ])
-
-        elif piece.name == "Official":
-            if "Monarch" in adj_pieces and not piece.promoted:
-                self.promote(piece, 1, new_directions=[
-                    (1, 1), (1, -1), (-1, -1), (-1, 1),
-                    (1, 0), (0, 1), (-1, 0), (0, -1)
-                ])
-            elif "Advisor" in adj_pieces and not piece.promoted:
-                self.promote(piece, move_distance=2)
+        elif piece.name == "Monarch" and adj_pieces and adj_pieces != {"Palace"}:
+            directions, distance = piece_settings["Monarch"]["promoted"]
+            update_piece_stats(directions, distance, True)
 
     def check_board_promotions(self):
         """Check all pieces on the board for promotion/demotion"""
@@ -337,9 +353,11 @@ class Game:
 
         # Handle capture
         if target != EMPTY and target.owner == enemy:
-            if target.name != "Palace":
+            if target.name == "Monarch":
+                self.kings_placed[enemy] = False
+            elif target.name != "Palace":
                 reserve[0 if target.name == "Advisor" else 1].append(target.name)
-                self.pieces_in_hand[player] += 1
+
             self.capture.play()
             action = f"captured {target.name} at {to_col + 1},{BOARD_SIZE - to_row}"
         else:
@@ -378,7 +396,6 @@ class Game:
         reserve[reserve_index].pop()
 
         self.reserve_selected = False
-        self.pieces_in_hand[self.current_player] -= 1
         self.selected_piece = None
         self.valid_moves = []
         self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
@@ -389,19 +406,10 @@ class Game:
 
         return True
 
-    def place_monarch(self, row, col):
-        king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
-                              1, self.current_player, False)
-        self.board[row][col] = king_to_place
-        self.kings_placed[self.current_player] = True
-        self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
-        self.place_sound.play()
-        self.add_to_log(f"Player {king_to_place.owner} placed Monarch at {col + 1},{BOARD_SIZE - row}")
-
     def end_of_move(self):
         self.check_board_promotions()
         self.did_someone_win()
-        self.network_finish_move()
+        self.send_game_state()
 
     def check_reserve_click(self, mouse_x, mouse_y):
         reserve_start_x = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + CELL_SIZE
@@ -485,7 +493,7 @@ class Game:
             # Select own piece
             elif piece != EMPTY and piece.owner == self.current_player:
                 self.selected_piece = (row, col)
-                self.valid_moves = self.get_valid_moves(row, col)
+                self.valid_moves = self.get_valid_movement_squares(row, col)
                 self.select_piece.play()
 
             # Place new piece from reserve
