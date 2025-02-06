@@ -4,21 +4,30 @@ import math
 from constants import *
 
 class StarPoint:
-    def __init__(self, center_x, center_y):
-        # Initialize near center with random offset
+    def __init__(self, center_x, center_y,star_color):
         offset_x = random.uniform(-5, 5)
         offset_y = random.uniform(-5, 5)
         self.position = [center_x + offset_x, center_y + offset_y]
         self.center = (center_x, center_y)  # Store center for distance calculation
-
-        # Start with a very small size
         self.size = 0.5
-
-        # Random vector between -1 and 1 for each component, without normalization
         x = random.uniform(-1, 1)
         y = random.uniform(-1, 1)
-        self.vector = (x, y)
 
+        min_speed = .1
+
+        # Ensure min speed
+        if x > 0:
+            x = max(min_speed, x)
+        else:
+            x = min(-min_speed, x)
+
+        if y > 0:
+            y = max(min_speed, y)
+        else:
+            y = min(-min_speed, y)
+
+        self.vector = (x, y)
+        self.color = star_color
     def update(self, speed):
         # Update position based on vector
         self.position[0] += self.vector[0] * speed
@@ -31,8 +40,8 @@ class StarPoint:
 
         # Gradually increase size based on distance
         # Starting from 0.5, growing to max 2.5
-        self.size = 0.5 + (distance / 400)  # Adjust 400 to control growth rate
-        self.size = min(2.5, self.size)  # Cap maximum size
+        self.size = 0.5 + (distance / 150)  # Adjust 400 to control growth rate
+        self.size = min(10, self.size)  # Cap maximum size
 
     def is_off_screen(self, width, height):
         return (self.position[0] < 0 or self.position[0] > width or
@@ -47,14 +56,21 @@ class MenuStarfield:
         self.frame_counter = 0
         self.spawn_interval = 2
         self.max_stars = 200
-        self.speed = 8
+        self.speed = 5
 
     def update(self):
         self.frame_counter += 1
 
+        star_chance = random.uniform(0,100)
+
+        if star_chance > 98:
+            star_color = (random.uniform(0,255),random.uniform(0,255),random.uniform(0,255))
+        else:
+            star_color = (255, 255, 255)
+
         # Spawn new star every few frames if under max
         if self.frame_counter % self.spawn_interval == 0 and len(self.stars) < self.max_stars:
-            self.stars.append(StarPoint(self.center[0], self.center[1]))
+            self.stars.append(StarPoint(self.center[0], self.center[1], star_color))
 
         # Update existing stars and remove ones that are off screen
         self.stars = [star for star in self.stars if not star.is_off_screen(self.width, self.height)]
@@ -63,7 +79,7 @@ class MenuStarfield:
 
     def draw(self, screen):
         for star in self.stars:
-            pygame.draw.circle(screen, (255, 255, 255),
+            pygame.draw.circle(screen, star.color,
                                (int(star.position[0]), int(star.position[1])),
                                star.size)  # Use dynamic size
 class DrawUtils:

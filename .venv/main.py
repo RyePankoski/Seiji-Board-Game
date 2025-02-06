@@ -269,9 +269,6 @@ class Game:
 
     def handle_piece_status(self, row, col):
         piece = self.board[row][col]
-        if piece == EMPTY:
-            return
-
         adj_pieces = self.has_friendly_adjacent_pieces(row, col)
 
         # Define piece settings for both base and promoted states
@@ -306,7 +303,6 @@ class Game:
             piece.move_distance = new_distance
 
             if should_promote and not was_promoted:
-                print(f"Promoting: {piece.name}")
                 self.promote_sound.play()
 
         # Check demotion conditions
@@ -345,7 +341,8 @@ class Game:
         """Check all pieces on the board for promotion/demotion"""
         for row in range(BOARD_SIZE):
             for col in range(BOARD_SIZE):
-                self.handle_piece_status(row, col)
+                if self.board[row][col] != EMPTY:
+                    self.handle_piece_status(row, col)
 
     def move_piece(self, from_pos, to_pos):
         """Handle piece movement and capture logic"""
@@ -499,6 +496,7 @@ class Game:
 
             # Select own piece
             elif piece != EMPTY and piece.owner == self.current_player:
+                self.deselect()
                 self.selected_piece = (row, col)
                 self.valid_moves = self.get_valid_movement_squares(row, col)
                 self.select_piece.play()
@@ -613,7 +611,7 @@ def main():
                     elif action == "Menu":
                         game.reset_game()
                         current_state = GameState.MENU
-                        utils.handle_music_transition('Sounds/menu_track.mp3')
+                        utils.handle_music_transition('Sounds/menu_theme.mp3')
 
             winner_text = "WHITE WINS" if game.winner == PLAYER_1 else "BLACK WINS"
             post_game_screen.draw(screen, winner_text)
