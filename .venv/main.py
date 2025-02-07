@@ -139,13 +139,11 @@ class Game:
         self.most_recent_message = None
 
     def handle_resign(self):
-        """Handle the resignation of current player"""
         if not self.game_over:
             self.game_over = True
             self.winner = PLAYER_2 if self.current_player == PLAYER_1 else PLAYER_1
             if not self.is_muted:
                 self.endgame.play()
-            # Add a message to the log about the resignation
             self.add_to_log(f"Player {self.current_player} has resigned. Player {self.winner} wins!")
             self.send_game_state()
 
@@ -375,26 +373,34 @@ class Game:
         if target != EMPTY and target.owner == enemy:
             if target.name == "Monarch":
                 self.kings_placed[enemy] = False
+                self.board[to_row][to_col], self.board[from_row][from_col] = piece, EMPTY
+                # Don't set game_over here - let it be handled in end_of_move
+
             elif target.name != "Palace":
                 reserve[0 if target.name == "Advisor" else 1].append(target.name)
 
             self.captured_piece = True
             self.capture.play()
             action = f"captured {target.name} at {to_col + 1},{BOARD_SIZE - to_row}"
+
         else:
             action = f"moved {piece.name} to: {to_col + 1},{BOARD_SIZE - to_row}"
+
         self.moved_piece = True
         self.add_to_log(f"Player {player} {action}")
         self.board[to_row][to_col], self.board[from_row][from_col] = piece, EMPTY
 
     def deselect(self):
+
+        if self.reserve_selected:
+            self.de_select.play()
+
         self.selected_piece = None
         self.selected_reserve_piece = None
         self.reserve_selected = False
         self.valid_moves = []
 
     def place_new_piece(self, row, col):
-
         if (row, col) not in self.get_valid_placement_squares():
             return False
 
@@ -428,8 +434,16 @@ class Game:
         return True
 
     def end_of_move(self):
+        """Handle end of move state updates and checks"""
+        # First update piece states
         self.check_board_promotions()
-        self.did_someone_win()
+
+        # Then check win conditions
+        if self.did_someone_win():
+            if not self.is_muted:
+                self.endgame.play()
+
+        # Always send game state last
         self.send_game_state()
 
     def check_reserve_click(self, mouse_x, mouse_y):
@@ -500,6 +514,7 @@ class Game:
                 if self.board[row][col] == EMPTY:
                     self.placed_piece = True
                     self.place_monarch(row, col)
+                    self.end_of_move()  # Only call when actually placing
                 return
 
             piece = self.board[row][col]
@@ -510,31 +525,35 @@ class Game:
                     self.move_piece(self.selected_piece, (row, col))
                     self.selected_piece, self.valid_moves = None, []
 
-                    if not self.game_over:
+                    if not self.game_over:  # Only change player if game isn't over
                         self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
+
                     self.moved_piece = True
                     self.slide_sound.play()
+                    self.end_of_move()  # Call after successful move
                 else:
                     self.deselect()
+                return  # Return after handling selected piece
 
             # Select own piece
-            elif piece != EMPTY and piece.owner == self.current_player:
+            if piece != EMPTY and piece.owner == self.current_player:
                 self.deselect()
                 self.selected_piece = (row, col)
                 self.valid_moves = self.get_valid_movement_squares(row, col)
                 self.select_piece.play()
+                return  # Early return after selecting
 
             # Place new piece from reserve
-            elif self.reserve_selected:
+            if self.reserve_selected:
                 if self.place_new_piece(row, col):
                     self.placed_piece = True
-                    pass
+                    self.end_of_move()  # Call after successful placement
                 else:
-                    self.de_select.play()
-                self.deselect()
+                    self.deselect()
 
-        finally:
-            self.end_of_move()
+        except Exception as e:
+            print(f"Error in handle_click: {e}")
+            self.end_of_move()  # Only call on error
 
 
 def main():
@@ -551,6 +570,10 @@ def main():
     post_game_screen = PostGameScreen()
     menu.ip_input = ""
     clock = pygame.time.Clock()
+
+    waiting_for_transition = False
+    transition_start_time = 0
+    TRANSITION_DELAY = 1000  # 1 second delay
 
     while True:
         if current_state == GameState.MENU:
@@ -579,6 +602,8 @@ def main():
                     if utils.handle_ip_input(event, menu):
                         current_state = utils.handle_multiplayer_connection(game, menu, screen)
 
+            menu.draw(screen)
+
         elif current_state == GameState.PLAYING:
             clock.tick(10)
             for event in pygame.event.get():
@@ -602,23 +627,38 @@ def main():
 
                     if game.resign_button_rect.collidepoint(mouse_x, mouse_y):
                         game.handle_resign()
-                        current_state = GameState.POST_GAME
+                        waiting_for_transition = True
+                        transition_start_time = pygame.time.get_ticks()
                         continue
 
                     if game.check_reserve_click(mouse_x, mouse_y):
                         game.reserve_selected = True
+                    else:
+                        col = (mouse_x - GRID_OFFSET) // CELL_SIZE
+                        row = (mouse_y - GRID_OFFSET) // CELL_SIZE
 
-                    col = (mouse_x - GRID_OFFSET) // CELL_SIZE
-                    row = (mouse_y - GRID_OFFSET) // CELL_SIZE
-                    if 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE:
-                        game.handle_click(row, col)
+                        if 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE:
+                            game.handle_click(row, col)
+                        else:
+                            game.deselect()
 
             game.process_network_updates()
-            if game.game_over:
-                current_state = GameState.POST_GAME
-            else:
-                DrawUtils.draw(game, screen)
-                DrawUtils.draw_message_log(game, screen)
+
+            # Always draw the current game state
+            DrawUtils.draw(game, screen)
+            DrawUtils.draw_message_log(game, screen)
+
+            # Handle transition to post-game state
+            if game.game_over and not waiting_for_transition:
+                waiting_for_transition = True
+                transition_start_time = pygame.time.get_ticks()
+
+            # Check if we should transition after delay
+            if waiting_for_transition:
+                current_time = pygame.time.get_ticks()
+                if current_time - transition_start_time >= TRANSITION_DELAY:
+                    current_state = GameState.POST_GAME
+                    waiting_for_transition = False
 
         elif current_state == GameState.POST_GAME:
             clock.tick(35)
@@ -640,9 +680,6 @@ def main():
 
             winner_text = "WHITE WINS" if game.winner == PLAYER_1 else "BLACK WINS"
             post_game_screen.draw(screen, winner_text)
-
-        if current_state == GameState.MENU:
-            menu.draw(screen)
 
         pygame.display.flip()
 

@@ -468,13 +468,25 @@ class DrawUtils:
             pygame.draw.circle(screen, contrast_color, center, CELL_SIZE // 4)
         elif piece.name == "Palace":
             area_size = PALACE_AREA
+            # Calculate original intended position without bounds checking
             top_left_x = (center[0] // CELL_SIZE) * CELL_SIZE - (area_size // 2) * CELL_SIZE
             top_left_y = (center[1] // CELL_SIZE) * CELL_SIZE - (area_size // 2) * CELL_SIZE
 
             outline_color = PLAYER_1_COLOR if piece.owner == PLAYER_1 else PLAYER_2_COLOR
+
+            # Create a clip rect that represents the board boundaries
+            board_rect = pygame.Rect(GRID_OFFSET, GRID_OFFSET, BOARD_SIZE * CELL_SIZE, BOARD_SIZE * CELL_SIZE)
+            original_clip = screen.get_clip()
+            screen.set_clip(board_rect)
+
+            # Draw the rectangle - it will only appear within the clipped board area
             outline_rect = pygame.Rect(top_left_x, top_left_y, area_size * CELL_SIZE, area_size * CELL_SIZE)
             pygame.draw.rect(screen, outline_color, outline_rect, 4)
 
+            # Reset the clip
+            screen.set_clip(original_clip)
+
+            # Draw the center purple square - calculate its position relative to the outline
             palace_top_left = (center[0] - CELL_SIZE // 4, center[1] - CELL_SIZE // 4)
             pygame.draw.rect(screen, PURPLE, (palace_top_left[0], palace_top_left[1], CELL_SIZE // 2, CELL_SIZE // 2))
 
