@@ -28,6 +28,7 @@ class Game:
             self.select_piece = pygame.mixer.Sound("Sounds/advisor.mp3")
             self.de_select = pygame.mixer.Sound("Sounds/de-select.mp3")
             self.enemy_promote = pygame.mixer.Sound("Sounds/enemy_promote.mp3")
+            self.enemy_select = pygame.mixer.Sound("Sounds/enemy_select.mp3")
 
             # textures
             self.background = pygame.image.load("Textures/background.png")
@@ -359,11 +360,13 @@ class Game:
                     self.handle_piece_status(row, col)
 
     def move_piece(self, from_pos, to_pos):
+
         """Handle piece movement and capture logic"""
         from_row, from_col = from_pos
         to_row, to_col = to_pos
 
         piece = self.board[from_row][from_col]
+
         target = self.board[to_row][to_col]
         player = piece.owner
         enemy = PLAYER_2 if player == PLAYER_1 else PLAYER_1
@@ -521,9 +524,16 @@ class Game:
             piece = self.board[row][col]
 
             # Handle movement if a piece is selected
-            if self.selected_piece:
+            if self.selected_piece:  # self.selected_piece is (row, col) tuple
+                old_row, old_col = self.selected_piece
+                selected_piece = self.board[old_row][old_col]  # Get the actual piece object
+
                 if (row, col) in self.valid_moves:
-                    self.move_piece(self.selected_piece, (row, col))
+                    # Check the actual piece's owner
+                    if selected_piece is not None and selected_piece.owner != self.current_player:
+                        return
+
+                    self.move_piece((old_row, old_col), (row, col))
                     self.selected_piece, self.valid_moves = None, []
 
                     if not self.game_over:  # Only change player if game isn't over
@@ -537,11 +547,16 @@ class Game:
                 return  # Return after handling selected piece
 
             # Select own piece
-            if piece != EMPTY and piece.owner == self.current_player:
+            if piece != EMPTY:
                 self.deselect()
-                self.selected_piece = (row, col)
+
+                if piece.owner != self.current_player:
+                    self.enemy_select.play()
+                else:
+                    self.select_piece.play()
+
+                self.selected_piece = (row, col)  # Store coordinates, not the piece
                 self.valid_moves = self.get_valid_movement_squares(row, col)
-                self.select_piece.play()
                 return  # Early return after selecting
 
             # Place new piece from reserve
