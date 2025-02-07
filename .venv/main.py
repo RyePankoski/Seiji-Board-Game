@@ -430,6 +430,7 @@ class Game:
         # Log and sound
         self.add_to_log(f"Player {self.board[row][col].owner} placed {piece_type} at: {col + 1},{BOARD_SIZE - row}")
         self.place_sound.play()
+        self.deselect()
 
         return True
 
