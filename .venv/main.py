@@ -451,29 +451,48 @@ class Game:
         self.send_game_state()
 
     def check_reserve_click(self, mouse_x, mouse_y):
-        reserve_start_x = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + CELL_SIZE
-        piece_spacing, padding = CELL_SIZE * 0.8, CELL_SIZE * 0.4
+        """Check if a click occurred in the reserve area and process it"""
+        # Match calculations from _draw_piece_reserve
+        reserve_width = int(WINDOW_WIDTH * 0.15)
+        reserve_height = int(WINDOW_HEIGHT * 0.25)
+        table_size = max(reserve_width, reserve_height)
+
+        # Calculate board center position
+        reserve_start_x = GRID_OFFSET_X + BOARD_PIXELS + int(WINDOW_WIDTH * 0.02)
+
+        # Scale piece spacing relative to reserve size
+        piece_spacing = int(reserve_width * 0.22)  # Match the drawing code
+        padding = int(piece_spacing * 0.15)
         max_pieces_per_row = 4
 
-        reserve_areas = {
-            PLAYER_1: (60, WINDOW_HEIGHT // 2, self.player1_reserve),
-            PLAYER_2: (WINDOW_HEIGHT // 2 - 60, WINDOW_HEIGHT - 60, self.player2_reserve)
-        }
-
+        # Early exit if click is left of reserve area
         if mouse_x < reserve_start_x:
             return False
+
+        # Calculate table positions matching the draw code
+        top_table_y = GRID_OFFSET
+        bottom_table_y = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) - table_size
+
+        reserve_areas = {
+            PLAYER_1: (top_table_y, top_table_y + table_size, self.player1_reserve),
+            PLAYER_2: (bottom_table_y, bottom_table_y + table_size, self.player2_reserve)
+        }
 
         def process_click(start_y, end_y, reserve):
             if not (start_y <= mouse_y <= end_y):
                 return False
 
             self.deselect()
+
+            # Calculate column based on click position
             col = int((mouse_x - (reserve_start_x + padding)) // piece_spacing)
             current_y = start_y + padding
 
             for section_idx, section in enumerate(reserve):
-                section_height = ((
-                                          len(section) + max_pieces_per_row - 1) // max_pieces_per_row) * piece_spacing + padding
+                num_pieces = len(section)
+                rows_needed = (num_pieces + max_pieces_per_row - 1) // max_pieces_per_row
+                section_height = rows_needed * piece_spacing + padding
+
                 if current_y <= mouse_y < current_y + section_height:
                     row = int((mouse_y - current_y) // piece_spacing)
                     piece_idx = row * max_pieces_per_row + col
@@ -497,7 +516,6 @@ class Game:
 
         self.selected_reserve_piece = None
         return False
-
     def handle_click(self, row, col):
         try:
             self.placed_piece = False

@@ -468,47 +468,58 @@ class DrawUtils:
             pygame.draw.circle(screen, contrast_color, center, CELL_SIZE // 4)
         elif piece.name == "Palace":
             area_size = PALACE_AREA
-            # Calculate original intended position without bounds checking
-            top_left_x = (center[0] // CELL_SIZE) * CELL_SIZE - (area_size // 2) * CELL_SIZE
-            top_left_y = (center[1] // CELL_SIZE) * CELL_SIZE - (area_size // 2) * CELL_SIZE
+            # Calculate grid position from center
+            grid_col = (center[0] - GRID_OFFSET) // CELL_SIZE
+            grid_row = (center[1] - GRID_OFFSET) // CELL_SIZE
+
+            # Calculate top-left position for palace area
+            top_left_x = GRID_OFFSET + (grid_col - (area_size // 2)) * CELL_SIZE
+            top_left_y = GRID_OFFSET + (grid_row - (area_size // 2)) * CELL_SIZE
 
             outline_color = PLAYER_1_COLOR if piece.owner == PLAYER_1 else PLAYER_2_COLOR
 
-            # Create a clip rect that represents the board boundaries
+            # Create a clip rect for the board boundaries
             board_rect = pygame.Rect(GRID_OFFSET, GRID_OFFSET, BOARD_SIZE * CELL_SIZE, BOARD_SIZE * CELL_SIZE)
             original_clip = screen.get_clip()
             screen.set_clip(board_rect)
 
-            # Draw the rectangle - it will only appear within the clipped board area
+            # Draw the rectangle
             outline_rect = pygame.Rect(top_left_x, top_left_y, area_size * CELL_SIZE, area_size * CELL_SIZE)
             pygame.draw.rect(screen, outline_color, outline_rect, 4)
 
             # Reset the clip
             screen.set_clip(original_clip)
 
-            # Draw the center purple square - calculate its position relative to the outline
-            palace_top_left = (center[0] - CELL_SIZE // 4, center[1] - CELL_SIZE // 4)
-            pygame.draw.rect(screen, PURPLE, (palace_top_left[0], palace_top_left[1], CELL_SIZE // 2, CELL_SIZE // 2))
+            # Draw the center purple square
+            palace_size = CELL_SIZE // 2
+            palace_top_left = (center[0] - palace_size // 2, center[1] - palace_size // 2)
+            pygame.draw.rect(screen, PURPLE, (palace_top_left[0], palace_top_left[1], palace_size, palace_size))
 
     @staticmethod
     def _draw_piece_reserve(game, screen):
         """Draw the piece reserve area on the right side with 3D borders"""
-        reserve_start_x = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + CELL_SIZE
+        # Calculate reserve area dimensions - made tables smaller
+        reserve_width = int(WINDOW_WIDTH * 0.15)  # Reduced from 0.20 to 0.15
+        reserve_height = int(WINDOW_HEIGHT * 0.25)  # Reduced from 0.30 to 0.25
 
-        piece_spacing = CELL_SIZE * 0.8
+        # Start reserve area after the board with some padding
+        reserve_start_x = GRID_OFFSET_X + BOARD_PIXELS + int(WINDOW_WIDTH * 0.02)
+        # Scale piece spacing relative to reserve size - increased relative piece size
+        piece_spacing = int(reserve_width * 0.22)  # Increased from 0.15 to 0.22
         max_pieces_per_row = 4
-        padding = piece_spacing * 0.5
-        max_possible_rows = 5
+        padding = int(piece_spacing * 0.15)
 
-        table_size = max(
-            (max_pieces_per_row * piece_spacing) + (padding * 3),
-            (max_possible_rows * piece_spacing) + (padding * 4)
-        )
+        # Calculate table size based on reserve dimensions
+        table_size = max(reserve_width, reserve_height)
 
-        # Draw tables with 3D borders
-        for y_offset in [60, WINDOW_HEIGHT // 2 - 60]:
+        # Align tables with board edges
+        top_table_y = GRID_OFFSET  # Align with board top
+        bottom_table_y = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) - table_size  # Align with board bottom
+
+        # Draw tables for both players
+        for y_offset in [top_table_y, bottom_table_y]:
             # Draw outer shadow border
-            border_width = 8
+            border_width = int(WINDOW_HEIGHT * 0.008)
             pygame.draw.rect(screen, (40, 40, 40),
                              (reserve_start_x - border_width,
                               y_offset - border_width,
@@ -524,24 +535,24 @@ class DrawUtils:
 
             # Draw table background
             table_texture = pygame.transform.scale(game.table_texture,
-                                                   (int(table_size), int(table_size)))
+                                                   (table_size, table_size))
             screen.blit(table_texture, (reserve_start_x, y_offset))
 
-        # Draw the pieces
+        # Draw the pieces with updated spacing
         DrawUtils._draw_reserve_pieces(game, screen, game.player1_reserve,
-                                       reserve_start_x, 60, WHITE, BLACK)
+                                       reserve_start_x, top_table_y,
+                                       WHITE, BLACK, piece_spacing, padding)
         DrawUtils._draw_reserve_pieces(game, screen, game.player2_reserve,
-                                       reserve_start_x, WINDOW_HEIGHT // 2 - 60,
-                                       BLACK, WHITE)
+                                       reserve_start_x, bottom_table_y,
+                                       BLACK, WHITE, piece_spacing, padding)
 
     @staticmethod
-    def _draw_reserve_pieces(game, screen, reserve, reserve_start_x, y_offset, piece_color, contrast_color):
-        """Draw pieces in the reserve area"""
-        piece_spacing = CELL_SIZE * 0.8
+    def _draw_reserve_pieces(game, screen, reserve, reserve_start_x, y_offset,
+                             piece_color, contrast_color, piece_spacing, padding):
+        """Draw pieces in the reserve area with scaled dimensions"""
         max_pieces_per_row = 4
-        padding = piece_spacing * 0.5
-
         current_y = y_offset + padding
+
         for section in reserve:
             num_pieces = len(section)
             rows_needed = (num_pieces + max_pieces_per_row - 1) // max_pieces_per_row
@@ -550,23 +561,34 @@ class DrawUtils:
                 row = piece_idx // max_pieces_per_row
                 col = piece_idx % max_pieces_per_row
 
+                # Calculate piece position
                 x = reserve_start_x + (col * piece_spacing) + padding
                 y = current_y + (row * piece_spacing)
+                center_x = int(x + piece_spacing / 2)
+                center_y = int(y + piece_spacing / 2)
 
+                # Scale piece sizes - made pieces larger
+                piece_radius = int(piece_spacing * 0.45)  # Increased from 0.35 to 0.45
+                inner_radius = int(piece_spacing * 0.22)  # Increased from 0.15 to 0.22
+                square_size = int(piece_spacing * 0.45)  # Increased from 0.35 to 0.45
+
+                # Draw main piece circle
                 pygame.draw.circle(screen, piece_color,
-                                   (int(x + piece_spacing / 2), int(y + piece_spacing / 2)),
-                                   int(piece_spacing / 2 - 5))
+                                   (center_x, center_y),
+                                   piece_radius)
 
+                # Draw piece type indicators
                 if piece_type == "Advisor":
                     pygame.draw.circle(screen, contrast_color,
-                                       (int(x + piece_spacing / 2), int(y + piece_spacing / 2)),
-                                       int(piece_spacing / 4))
+                                       (center_x, center_y),
+                                       inner_radius)
                 elif piece_type == "Palace":
                     pygame.draw.rect(screen, PURPLE,
-                                     (int(x + piece_spacing / 2 - piece_spacing / 4),
-                                      int(y + piece_spacing / 2 - piece_spacing / 4),
-                                      piece_spacing / 2, piece_spacing / 2))
+                                     (center_x - square_size // 2,
+                                      center_y - square_size // 2,
+                                      square_size, square_size))
 
+            # Update y position for next section
             current_y += rows_needed * piece_spacing + padding
 
     @staticmethod
@@ -580,28 +602,41 @@ class DrawUtils:
 
     @staticmethod
     def _draw_selected_reserve_piece(game, screen):
-        """Draw highlight for selected reserve piece"""
-        reserve_start_x = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + CELL_SIZE
-        piece_spacing = CELL_SIZE * 0.8
-        padding = piece_spacing * 0.5
-        max_pieces_per_row = 4
+        """Draw highlight for selected reserve piece using scaled dimensions"""
+        reserve_width = int(WINDOW_WIDTH * 0.15)
+        piece_spacing = int(reserve_width * 0.22)
+        padding = int(piece_spacing * 0.15)
 
-        y_offset = 60 if game.selected_reserve_piece['player'] == PLAYER_1 else WINDOW_HEIGHT // 2 - 60
+        # Calculate table size and positions
+        table_size = max(reserve_width, int(WINDOW_HEIGHT * 0.25))
+        reserve_start_x = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) + int(WINDOW_WIDTH * 0.02)
+        top_table_y = GRID_OFFSET
+        bottom_table_y = GRID_OFFSET + (BOARD_SIZE * CELL_SIZE) - table_size
 
-        # Find the correct y position by calculating cumulative height
+        # Determine base y_offset based on player
+        y_offset = top_table_y if game.selected_reserve_piece['player'] == PLAYER_1 else bottom_table_y
         current_y = y_offset + padding
-        reserve = game.player1_reserve if game.selected_reserve_piece['player'] == PLAYER_1 else game.player2_reserve
 
+        # Calculate section offset
         for section_idx in range(game.selected_reserve_piece['section']):
-            num_pieces = len(reserve[section_idx])
-            rows_needed = (num_pieces + max_pieces_per_row - 1) // max_pieces_per_row
+            section = (game.player1_reserve if game.selected_reserve_piece['player'] == PLAYER_1
+                       else game.player2_reserve)[section_idx]
+            rows_needed = (len(section) + 3) // 4
             current_y += rows_needed * piece_spacing + padding
 
-        # Use stored row and col values directly
+        # Calculate piece center position
         row = game.selected_reserve_piece['row']
         col = game.selected_reserve_piece['col']
 
-        x = reserve_start_x + (col * piece_spacing) + padding
-        y = current_y + (row * piece_spacing)
+        piece_x = reserve_start_x + (col * piece_spacing) + padding
+        piece_y = current_y + (row * piece_spacing)
 
-        pygame.draw.rect(screen, RED, (x, y, piece_spacing, piece_spacing), 2)
+        # Draw highlight rect centered on the piece with proper spacing
+        highlight_rect = pygame.Rect(
+            piece_x - padding // 2,
+            piece_y - padding // 2,
+            piece_spacing + padding,
+            piece_spacing + padding
+        )
+
+        pygame.draw.rect(screen, RED, highlight_rect, 2)
