@@ -26,14 +26,30 @@ class NetworkManager:
             self.connected = False
             return False
 
+
+            # self.placed_piece = False
+            # self.moved_piece = False
+            # self.captured_piece = False
+            # self.promoted_piece = False
+
     def send_game_state(self, board: list, current_player: int,
                         player1_reserve: list, player2_reserve: list,
                         most_recent_message: str, kings_placed: dict,
                         monarch_placement_phase: bool,
-                        game_over: bool = False,  # Add these new parameters
+                        placed_piece: bool,
+                        moved_piece: bool,
+                        captured_piece: bool,
+                        promoted_piece: bool,
+                        game_over: bool = False,
                         winner: int = None) -> bool:
         if not self.connected:
             return False
+
+        print("DEBUG - Values going into game_state:")
+        print(f"placed_piece: {placed_piece}")
+        print(f"moved_piece: {moved_piece}")
+        print(f"captured_piece: {captured_piece}")
+        print(f"promoted_piece: {promoted_piece}")
 
         # Create serializable board state
         serializable_board = []
@@ -61,7 +77,11 @@ class NetworkManager:
             "kings_placed": {str(k): v for k, v in kings_placed.items()},
             "monarch_placement_phase": monarch_placement_phase,
             "game_over": game_over,  # Add these new fields
-            "winner": winner
+            "winner": winner,
+            "placed_piece": placed_piece,
+            "moved_piece": moved_piece,
+            "captured_piece": captured_piece,
+            "promoted_piece": promoted_piece
         }
 
         try:
@@ -78,6 +98,13 @@ class NetworkManager:
     def update_game_state(self, game, new_state: Dict) -> None:
         """Updates the game state with data received from network"""
         # Convert the serialized board back to Piece objects
+        print("Received state:", {
+            "placed_piece": new_state["placed_piece"],
+            "moved_piece": new_state["moved_piece"],
+            "captured_piece": new_state["captured_piece"],
+            "promoted_piece": new_state["promoted_piece"]
+        })
+
         board = []
         for row in new_state["board"]:
             board_row = []
@@ -105,9 +132,23 @@ class NetworkManager:
         game.kings_placed = {int(k): v for k, v in new_state["kings_placed"].items()}
         game.monarch_placement_phase = new_state["monarch_placement_phase"]
 
+        if new_state["placed_piece"]:
+            print("Playing placed_piece")
+            game.place_sound.play()
+        if new_state["moved_piece"]:
+            print("Playing moved_piece")
+            game.slide_sound.play()
+        if new_state["captured_piece"]:
+            print("Playing captured_piece")
+            game.capture.play()
+        if new_state["promoted_piece"]:
+            print("Playing promoted_piece")
+            game.enemy_promote.play()
+
         # Update game over state and winner
         game.game_over = new_state.get("game_over", False)
         game.winner = new_state.get("winner", None)
+
 
         game.is_king_placement_phase()
         game.did_someone_win()

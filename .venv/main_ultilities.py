@@ -39,7 +39,7 @@ class MainUtilities:
         except pygame.error as e:
             print(f"Could not load or play music file: {e}")
 
-    def handle_volume_control(self, event):
+    def handle_volume_control(game, self, event):
         """Handle volume up/down controls with arrow keys"""
         current_volume = mixer.music.get_volume()
 
@@ -64,7 +64,7 @@ class MainUtilities:
             self.select_piece,
             self.de_select
         ]:
-            sound.set_volume(new_volume) # Fixed min() to max() for downward adjustment
+            sound.set_volume(new_volume)
 
     def fade_to_black(self, screen, speed=5):
         """Create a fade to black transition effect"""
