@@ -13,10 +13,12 @@ from piece import Piece
 from UI import PostGameScreen
 
 pygame.init()
+
+
 class Game:
     def __init__(self):
         def initialize_assets():
-            #sounds
+            # sounds
             self.place_sound = pygame.mixer.Sound("Sounds/place_sound.mp3")
             self.slide_sound = pygame.mixer.Sound("Sounds/slide_sound.mp3")
             self.pick_up = pygame.mixer.Sound("Sounds/pick_up.mp3")
@@ -27,14 +29,12 @@ class Game:
             self.de_select = pygame.mixer.Sound("Sounds/de-select.mp3")
             self.enemy_promote = pygame.mixer.Sound("Sounds/enemy_promote.mp3")
 
-
-            #textures
+            # textures
             self.background = pygame.image.load("Textures/background.png")
             self.background = pygame.transform.scale(self.background, (BOARD_SIZE * CELL_SIZE, BOARD_SIZE * CELL_SIZE))
             self.background_2 = pygame.image.load("Textures/background_2.png")
             self.background_2 = pygame.transform.scale(self.background_2, (WINDOW_WIDTH, WINDOW_HEIGHT))
             self.table_texture = pygame.image.load("Textures/tables.png").convert_alpha()
-
 
         initialize_assets()
 
@@ -93,10 +93,6 @@ class Game:
 
     def send_game_state(self):
         if self.multiplayer:
-            print(f"Sending piece_placed of {self.placed_piece}")
-            print(f"Sending moved_piece of {self.moved_piece}")
-            print(f"Sending captured_piece of {self.captured_piece}")
-            print(f"Sending promoted_piece of {self.promoted_piece}")
             self.network_manager.send_game_state(
                 self.board,
                 self.current_player,
@@ -171,7 +167,6 @@ class Game:
             self.monarch_placement_phase = False
 
         return not all(self.kings_placed.values())
-
 
     def place_monarch(self, row, col):
         king_to_place = Piece("Monarch", [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)],
@@ -324,7 +319,6 @@ class Game:
 
             if should_promote and not was_promoted:
                 self.promoted_piece = True
-                print(f"promoted_piece set {self.promoted_piece}")
                 self.promote_sound.play()
 
         # Check demotion conditions
@@ -385,7 +379,6 @@ class Game:
                 reserve[0 if target.name == "Advisor" else 1].append(target.name)
 
             self.captured_piece = True
-            print(f"captured_piece set {self.captured_piece}")
             self.capture.play()
             action = f"captured {target.name} at {to_col + 1},{BOARD_SIZE - to_row}"
         else:
@@ -494,7 +487,6 @@ class Game:
             self.captured_piece = False
             self.promoted_piece = False
 
-
             if self.game_over:
                 return
 
@@ -506,9 +498,7 @@ class Game:
                     return  # Don't allow placement in center
 
                 if self.board[row][col] == EMPTY:
-
                     self.placed_piece = True
-                    print(f"Placed_piece set {self.placed_piece}")
                     self.place_monarch(row, col)
                 return
 
@@ -523,7 +513,6 @@ class Game:
                     if not self.game_over:
                         self.current_player = PLAYER_1 if self.current_player == PLAYER_2 else PLAYER_2
                     self.moved_piece = True
-                    print(f"moved_piece set {self.moved_piece}")
                     self.slide_sound.play()
                 else:
                     self.deselect()
@@ -539,7 +528,6 @@ class Game:
             elif self.reserve_selected:
                 if self.place_new_piece(row, col):
                     self.placed_piece = True
-                    print(f"placed_piece set {self.placed_piece}")
                     pass
                 else:
                     self.de_select.play()
@@ -547,6 +535,7 @@ class Game:
 
         finally:
             self.end_of_move()
+
 
 def main():
     pygame.init()
@@ -597,7 +586,7 @@ def main():
                     utils.handle_exit(screen)
 
                 if event.type == pygame.KEYDOWN:
-                    utils.handle_volume_control(game,event)
+                    utils.handle_volume_control(game, event)
 
                 if event.type == pygame.MOUSEMOTION:
                     mouse_x, mouse_y = pygame.mouse.get_pos()
@@ -656,6 +645,7 @@ def main():
             menu.draw(screen)
 
         pygame.display.flip()
+
 
 if __name__ == "__main__":
     main()
